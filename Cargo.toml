@@ -1,0 +1,19 @@
+[package]
+name = "proc_jail"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Process execution guard for agentic systems"
+repository = "https://github.com/anthropics/proc_jail"
+keywords = ["security", "process", "sandbox", "injection", "agentic"]
+categories = ["os", "command-line-utilities"]
+
+[dependencies]
+tokio = { version = "1", features = ["process", "time", "io-util", "rt", "macros"] }
+thiserror = "1"
+tracing = "0.1"
+libc = "0.2"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tempfile = "3"
