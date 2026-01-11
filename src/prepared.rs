@@ -174,9 +174,7 @@ impl PreparedCommand {
         if let Ok(handle) = tokio::runtime::Handle::try_current() {
             // We're in an async context, use block_on
             // Note: This can cause issues if called from within an async context
-            std::thread::scope(|s| {
-                s.spawn(|| handle.block_on(self.spawn())).join().unwrap()
-            })
+            std::thread::scope(|s| s.spawn(|| handle.block_on(self.spawn())).join().unwrap())
         } else {
             // Create a new runtime
             let rt = tokio::runtime::Builder::new_current_thread()

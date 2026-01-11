@@ -213,7 +213,9 @@ mod tests {
 
     #[test]
     fn test_max_flags() {
-        let rules = ArgRules::new().allowed_flags(&["-a", "-b", "-c"]).max_flags(2);
+        let rules = ArgRules::new()
+            .allowed_flags(&["-a", "-b", "-c"])
+            .max_flags(2);
 
         assert!(rules.validate(s(&["-a", "-b"])).is_ok());
         assert!(matches!(
@@ -291,7 +293,9 @@ mod tests {
     #[test]
     fn test_combined_flags_not_expanded() {
         // -abc is treated as a single flag, not -a -b -c
-        let rules = ArgRules::new().allowed_flags(&["-a", "-b", "-c"]).max_flags(3);
+        let rules = ArgRules::new()
+            .allowed_flags(&["-a", "-b", "-c"])
+            .max_flags(3);
 
         assert!(matches!(
             rules.validate(s(&["-abc"])),

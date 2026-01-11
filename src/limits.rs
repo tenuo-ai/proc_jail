@@ -31,7 +31,7 @@ impl Default for ResourceLimits {
         Self {
             timeout: Duration::from_secs(30),
             max_stdout: 10 * 1024 * 1024, // 10 MB
-            max_stderr: 1024 * 1024,  // 1 MB
+            max_stderr: 1024 * 1024,      // 1 MB
         }
     }
 }

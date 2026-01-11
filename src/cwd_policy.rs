@@ -82,10 +82,11 @@ impl CwdPolicy {
                 let target = requested.unwrap_or(default);
 
                 // Canonicalize both paths for comparison
-                let canonical_root = std::fs::canonicalize(root).map_err(|e| Violation::CwdForbidden {
-                    path: root.display().to_string(),
-                    reason: format!("failed to canonicalize jail root: {}", e),
-                })?;
+                let canonical_root =
+                    std::fs::canonicalize(root).map_err(|e| Violation::CwdForbidden {
+                        path: root.display().to_string(),
+                        reason: format!("failed to canonicalize jail root: {}", e),
+                    })?;
 
                 let canonical_target =
                     std::fs::canonicalize(target).map_err(|e| Violation::CwdForbidden {

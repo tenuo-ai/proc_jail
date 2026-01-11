@@ -34,40 +34,14 @@ pub const RISKY_SHELLS: &[&str] = &[
 
 /// Script interpreters that can execute arbitrary code.
 pub const RISKY_INTERPRETERS: &[&str] = &[
-    "python",
-    "python2",
-    "python3",
-    "perl",
-    "ruby",
-    "node",
-    "nodejs",
-    "deno",
-    "bun",
-    "php",
-    "lua",
-    "luajit",
-    "tclsh",
-    "wish",
-    "awk",
-    "gawk",
-    "nawk",
-    "mawk",
+    "python", "python2", "python3", "perl", "ruby", "node", "nodejs", "deno", "bun", "php", "lua",
+    "luajit", "tclsh", "wish", "awk", "gawk", "nawk", "mawk",
 ];
 
 /// Process spawners that can execute other binaries.
 pub const RISKY_SPAWNERS: &[&str] = &[
-    "env",
-    "xargs",
-    "parallel",
-    "nohup",
-    "timeout",
-    "time",
-    "nice",
-    "ionice",
-    "strace",
-    "ltrace",
-    "watch",
-    "exec",
+    "env", "xargs", "parallel", "nohup", "timeout", "time", "nice", "ionice", "strace", "ltrace",
+    "watch", "exec",
 ];
 
 /// Privilege escalation tools.
@@ -86,7 +60,10 @@ pub fn categorize_risky(path: &Path) -> Option<RiskCategory> {
         .unwrap_or(filename)
         .trim_end_matches(|c: char| c.is_ascii_digit());
 
-    if RISKY_SHELLS.iter().any(|&s| s == base_name || s == filename) {
+    if RISKY_SHELLS
+        .iter()
+        .any(|&s| s == base_name || s == filename)
+    {
         return Some(RiskCategory::Shell);
     }
 
@@ -125,11 +102,13 @@ pub fn check_risky(path: &Path, policy: RiskyBinPolicy) -> Result<(), Violation>
         RiskyBinPolicy::Disabled => Ok(()),
         RiskyBinPolicy::AllowWithWarning => {
             if let Some(category) = categorize_risky(path) {
+                #[cfg(feature = "tracing")]
                 tracing::warn!(
                     path = %path.display(),
                     category = %category,
                     "Allowing risky binary execution"
                 );
+                let _ = category; // Suppress unused warning when tracing is disabled
             }
             Ok(())
         }

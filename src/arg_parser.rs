@@ -109,10 +109,7 @@ mod tests {
 
     #[test]
     fn test_flag_classification() {
-        assert_eq!(
-            classify_arg("-f", false),
-            ArgType::Flag("-f".to_string())
-        );
+        assert_eq!(classify_arg("-f", false), ArgType::Flag("-f".to_string()));
         assert_eq!(
             classify_arg("--verbose", false),
             ArgType::Flag("--verbose".to_string())

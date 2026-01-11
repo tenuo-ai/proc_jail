@@ -1,195 +1,85 @@
 # Design Decisions
 
-This document explains the rationale behind key design decisions in `proc_jail`.
+This document explains the rationale behind key design decisions in proc_jail.
 
-## Why Allowlist-Only for Flags (No Denylist)
+## No Shell Interpretation (R1)
 
-**Decision**: Only explicitly allowed flags pass validation. There is no `denied_flags` option.
+**Decision**: proc_jail only accepts argv-style argument arrays. There is no API that accepts shell command strings.
 
-**Rationale**:
+**Rationale**: Shell interpretation is the root cause of command injection vulnerabilities. By eliminating it entirely, we remove an entire class of bugs. The Unix `execve` syscall receives an array of arguments with kernel-enforced boundaries. Shell metacharacters like `;`, `|`, `$()` are just literal characters.
 
-Denylists fail. Consider trying to block the `-f` flag (read patterns from file):
+**Trade-off**: Less convenient for quick scripts. Users must construct argument arrays explicitly.
 
-```rust
-// ❌ WRONG: Denylist approach
-denied_flags: ["-f"]
-```
+## Absolute Paths Only (R2)
 
-An attacker can bypass this with:
-- `--file` (long form)
-- `--file=patterns.txt` (with value)
-- `-F` (case variation on some systems)
-- `--regexp-file` (alias)
+**Decision**: Binary paths must be absolute (start with `/`). No PATH lookup.
 
-You will spend forever chasing flag aliases. Every program has different conventions.
+**Rationale**: PATH hijacking is a common attack vector. An attacker who can modify PATH or place a malicious binary earlier in PATH can intercept commands. Absolute paths eliminate this ambiguity.
 
-**Allowlists are verbose but correct**:
+**Trade-off**: Users must know where binaries are located. Different on different systems.
 
-```rust
-// ✅ CORRECT: Allowlist approach
-allowed_flags: ["-n", "-i", "-l", "-c", "--color=never"]
-```
+## Allowlist-Only Flags (R8)
 
-If it's not in the list, it's denied. No surprises.
+**Decision**: There is no denylist API. Flags must be explicitly allowed.
 
-## Why `-abc` Is Not Expanded to `-a -b -c`
+**Rationale**: Denylists fail. Blocking `-f` does not block `--file`. Blocking `--file` does not block `--file=value`. Flag aliases vary across tools and versions. Allowlists are verbose but correct.
 
-**Decision**: Combined short flags like `-abc` are treated as a single flag, not expanded.
+**Trade-off**: More upfront work to specify allowed flags.
 
-**Rationale**:
+## Mandatory ArgRules (R7)
 
-1. **No universal standard**: Not all programs support combined flags. Some treat `-abc` as a long flag.
+**Decision**: Every allowed binary must have an `ArgRules` entry. There is no "allow any arguments" mode.
 
-2. **Security over convenience**: Expanding `-abc` to `-a -b -c` could allow unintended combinations. If you allow `-a` and `-b` individually but not together, expansion would violate that intent.
+**Rationale**: "Allow binary with any args" defeats the purpose of proc_jail. Many binaries have dangerous flags (`-f`, `--exec`, etc.). If you want unrestricted execution, use `std::process::Command` directly.
 
-3. **Explicit is safer**: If you want to allow `-a`, `-b`, and `-abc`, add all three to the allowlist.
+**Trade-off**: Cannot quickly allow a binary without thinking about its arguments.
 
-```rust
-// To allow both styles:
-allowed_flags: ["-a", "-b", "-c", "-ab", "-abc"]
-```
+## Fail Closed (R13)
 
-## Why `--flag=value` Doesn't Match `--flag`
+**Decision**: Any error, ambiguity, or validation failure results in denial.
 
-**Decision**: `--file=foo.txt` does not match `--file` in the allowlist.
+**Rationale**: Security-critical code must fail safely. An unexpected edge case should block execution, not permit it. Users can explicitly allow edge cases if needed.
 
-**Rationale**:
+**Trade-off**: May block legitimate use cases that weren't anticipated.
 
-The value is part of the flag for security purposes:
+## No Windows Support
 
-```rust
-// Only allows --color with "never" value
-allowed_flags: ["--color=never"]
+**Decision**: proc_jail refuses to compile on Windows.
 
-"--color=never"  // ✅ Matches
-"--color=always" // ❌ Rejected
-"--color"        // ❌ Rejected (different flag)
-```
+**Rationale**: Windows `CreateProcess` receives a single command-line string that each program parses differently. There is no kernel-enforced boundary between arguments. We cannot guarantee injection prevention. Providing a Windows build would give false confidence.
 
-If you want to allow any value, you must enumerate them:
+**Trade-off**: Cannot use proc_jail on Windows.
 
-```rust
-allowed_flags: ["--color=never", "--color=auto", "--color=always"]
-```
+See [docs/windows.md](windows.md) for details.
 
-This prevents attackers from passing unexpected values.
+## Double-Dash is Best-Effort (R9)
 
-**Future consideration**: v0.2+ may add pattern matching (`--color=*`), but v0.1 requires explicit enumeration.
+**Decision**: The `InjectDoubleDash` feature is opt-in and documented as best-effort.
 
-## Why Absolute Paths Only
+**Rationale**: The POSIX `--` convention is widely but not universally followed. Some programs ignore it or parse it differently. We provide the feature for programs that do follow the convention but do not rely on it as the sole defense.
 
-**Decision**: Binary paths must be absolute (start with `/`).
+**Trade-off**: Users must test with their specific binaries.
 
-**Rationale**:
+## Risky Binary Detection is Advisory (R6)
 
-Relative paths are ambiguous and attackable:
+**Decision**: The risky binary lists (shells, interpreters, etc.) are advisory. The default policy is to deny them even if allowlisted, but users can override.
 
-```
-"grep"          → Depends on PATH, can be hijacked
-"./grep"        → Depends on cwd, can be manipulated
-"../bin/grep"   → Depends on cwd, traversal possible
-"/usr/bin/grep" → Unambiguous, canonicalizable
-```
+**Rationale**: Defense in depth. Accidentally allowlisting `/bin/bash` is a common mistake. The risky binary check catches this. But the lists cannot be exhaustive, so users should not rely solely on them.
 
-Since we canonicalize paths anyway, requiring absolute paths upfront:
-1. Makes intent clear
-2. Fails fast if caller makes a mistake
-3. Avoids PATH-based attacks entirely
+**Trade-off**: May block legitimate uses of interpreters.
 
-## Why Canonicalize Before Comparison
+## Environment Default is Empty (R10)
 
-**Decision**: Binary paths are resolved (symlinks followed) before comparison to the allowlist.
+**Decision**: By default, no environment variables are passed to spawned processes.
 
-**Rationale**:
+**Rationale**: Environment variables can modify behavior in dangerous ways (LD_PRELOAD, PYTHONPATH, etc.). Starting from an empty environment and adding only what's needed is safer than starting from the parent's environment and trying to remove dangerous variables.
 
-Without canonicalization, this attack works:
+**Trade-off**: Programs that need environment variables require explicit configuration.
 
-```bash
-# Attacker creates symlink
-ln -s /bin/bash /tmp/safe_tool
+## Type-Safe API
 
-# Allowlist contains only /usr/bin/grep
-policy.prepare("/tmp/safe_tool")  # Would this work?
-```
+**Decision**: Only `PreparedCommand` can spawn processes. `PreparedCommand` cannot be constructed outside of `ProcPolicy::prepare()`.
 
-With canonicalization:
-1. `/tmp/safe_tool` resolves to `/bin/bash`
-2. `/bin/bash` is not in allowlist
-3. Request denied
+**Rationale**: Makes it impossible to accidentally bypass validation. The type system enforces the security invariant.
 
-The canonicalized path represents "what will actually execute."
-
-## Why Environment Is Empty by Default
-
-**Decision**: `EnvPolicy::Empty` is the default—processes inherit no environment.
-
-**Rationale**:
-
-Environment variables can modify behavior in dangerous ways:
-
-| Variable | Risk |
-|----------|------|
-| `LD_PRELOAD` | Load arbitrary shared libraries |
-| `PYTHONPATH` | Load arbitrary Python modules |
-| `PATH` | Change which binaries are found |
-| `EDITOR` | Execute arbitrary commands |
-
-Secure-by-default means no environment. Callers must opt-in:
-
-```rust
-// Explicit choice to pass locale
-.env_policy(EnvPolicy::LocaleOnly)
-
-// Explicit choice to pass specific vars
-.env_policy(EnvPolicy::Fixed(my_env))
-```
-
-## Why Double-Dash Injection Is Optional
-
-**Decision**: Double-dash (`--`) injection is off by default (`InjectDoubleDash::Never`).
-
-**Rationale**:
-
-1. **Not all programs support it**: Some programs ignore `--` or interpret it differently.
-
-2. **May break legitimate use**: If a program doesn't expect `--`, it might fail.
-
-3. **Callers should test first**: Enable only after verifying your target programs handle `--` correctly.
-
-```rust
-// Only enable after testing with your specific binaries
-.inject_double_dash(InjectDoubleDash::AfterFlags)
-```
-
-## Why Kill, Not Truncate, on Limit Exceeded
-
-**Decision**: When output limits are exceeded, the process is killed (SIGKILL).
-
-**Rationale**:
-
-1. **Simpler guarantee**: Caller knows the process is dead, no cleanup needed.
-
-2. **Prevents resource waste**: A truncated process might continue consuming CPU/memory.
-
-3. **Fail-fast philosophy**: Better to fail clearly than silently truncate.
-
-**Future consideration**: v0.2+ may add `LimitBehavior::Truncate` for cases where the caller wants partial output without killing.
-
-## Why PreparedCommand Cannot Be Constructed Directly
-
-**Decision**: `PreparedCommand` has no public constructor. Only `ProcPolicy::prepare()` can create one.
-
-**Rationale**:
-
-This is the "typestate" pattern—the type system enforces the validation workflow:
-
-```rust
-// The ONLY way to get a PreparedCommand
-let prepared: PreparedCommand = policy.prepare(request)?;
-
-// PreparedCommand::new() doesn't exist
-// You cannot bypass validation
-```
-
-This eliminates an entire class of bugs where code accidentally spawns unvalidated commands.
-
+**Trade-off**: Slightly more verbose API.

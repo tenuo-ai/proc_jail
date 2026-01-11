@@ -121,7 +121,6 @@ Please include:
 - Potential impact assessment
 - Suggested fix (if any)
 
-We aim to respond within 48 hours and will work with you on disclosure timing.
 
 ## Security Checklist for Users
 

@@ -1,1 +1,16 @@
+# Rust
 /target
+Cargo.lock
+
+# Python
+python/.venv/
+python/target/
+__pycache__/
+*.py[cod]
+*.so
+*.pyd
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+.eggs/

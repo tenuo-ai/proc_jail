@@ -2,7 +2,10 @@
 //!
 //! These tests verify end-to-end behavior with real binaries.
 
-use proc_jail::{ArgRules, CwdPolicy, EnvPolicy, InjectDoubleDash, ProcPolicy, ProcRequest, RiskyBinPolicy, Violation};
+use proc_jail::{
+    ArgRules, CwdPolicy, EnvPolicy, InjectDoubleDash, ProcPolicy, ProcRequest, RiskyBinPolicy,
+    Violation,
+};
 use std::time::Duration;
 
 /// Helper to create a grep policy for testing.
@@ -67,8 +70,11 @@ async fn test_double_dash_injection_works() {
 
     // Verify -- was injected between flags and positionals
     let argv = prepared.argv();
-    assert!(argv.contains(&"--".to_string()), "Expected -- to be inserted");
-    
+    assert!(
+        argv.contains(&"--".to_string()),
+        "Expected -- to be inserted"
+    );
+
     // The argv should be: ["-n", "--", "test", tmp_file]
     let dash_pos = argv.iter().position(|x| x == "--").unwrap();
     let n_pos = argv.iter().position(|x| x == "-n").unwrap();
@@ -90,7 +96,11 @@ async fn test_shell_injection_prevented() {
 
     let request = ProcRequest::new(
         "/usr/bin/grep",
-        vec!["-n".to_string(), malicious_query.to_string(), tmp_file.to_string()],
+        vec![
+            "-n".to_string(),
+            malicious_query.to_string(),
+            tmp_file.to_string(),
+        ],
     );
 
     let prepared = policy.prepare(request).unwrap();
@@ -247,7 +257,10 @@ async fn test_subcommand_pinning() {
     // Wrong subcommand rejected
     let request = ProcRequest::new("/usr/bin/git", vec!["push".to_string()]);
     let result = policy.prepare(request);
-    assert!(matches!(result, Err(Violation::ArgSubcommandMismatch { .. })));
+    assert!(matches!(
+        result,
+        Err(Violation::ArgSubcommandMismatch { .. })
+    ));
 
     // Correct subcommand accepted (might fail at runtime if /tmp isn't a git repo, but prepare succeeds)
     let request = ProcRequest::new("/usr/bin/git", vec!["status".to_string()]);
@@ -267,7 +280,12 @@ async fn test_positional_with_dash_like_content() {
     // Search for literal "-e" in the file
     let request = ProcRequest::new(
         "/usr/bin/grep",
-        vec!["-n".to_string(), "--".to_string(), "-e".to_string(), tmp_file.to_string()],
+        vec![
+            "-n".to_string(),
+            "--".to_string(),
+            "-e".to_string(),
+            tmp_file.to_string(),
+        ],
     );
 
     // This should work because -- is already present, and -e after -- is positional

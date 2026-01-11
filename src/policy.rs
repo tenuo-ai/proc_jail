@@ -83,11 +83,12 @@ impl ProcPolicy {
         check_risky(&canonical_bin, self.risky_bin_policy)?;
 
         // R7: Get argument rules (must exist)
-        let arg_rules = self.arg_rules.get(&canonical_bin).ok_or_else(|| {
-            Violation::ArgRulesRequired {
-                bin: canonical_bin.display().to_string(),
-            }
-        })?;
+        let arg_rules =
+            self.arg_rules
+                .get(&canonical_bin)
+                .ok_or_else(|| Violation::ArgRulesRequired {
+                    bin: canonical_bin.display().to_string(),
+                })?;
 
         // R8-R9: Validate and transform arguments
         let validated_argv = arg_rules.validate(request.argv)?;
@@ -345,8 +346,7 @@ mod tests {
             .build()
             .unwrap();
 
-        let request =
-            ProcRequest::new("/usr/bin/env", vec!["true".to_string(), "arg".to_string()]);
+        let request = ProcRequest::new("/usr/bin/env", vec!["true".to_string(), "arg".to_string()]);
         let prepared = policy.prepare(request).unwrap();
 
         // Should have -- injected at start since no flags

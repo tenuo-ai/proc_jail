@@ -1,0 +1,16 @@
+[package]
+name = "proc_jail_python"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Python bindings for proc_jail"
+publish = false
+
+[lib]
+name = "proc_jail_python"
+crate-type = ["cdylib"]
+
+[dependencies]
+proc_jail = { path = ".." }
+pyo3 = { version = "0.22", features = ["extension-module"] }
+tokio = { version = "1", features = ["rt-multi-thread"] }

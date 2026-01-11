@@ -45,7 +45,9 @@ fn inject_after_flags(argv: Vec<String>) -> Vec<String> {
     let parsed = parse_argv(&argv);
 
     // Check if there are any positionals
-    let has_positionals = parsed.iter().any(|(t, _)| matches!(t, ArgType::Positional(_)));
+    let has_positionals = parsed
+        .iter()
+        .any(|(t, _)| matches!(t, ArgType::Positional(_)));
 
     if !has_positionals {
         // No positionals, no injection needed
@@ -139,11 +141,24 @@ mod tests {
     #[test]
     fn test_user_input_with_dashes() {
         // Example from spec: user input looks like flags
-        let argv = s(&["-r", "-n", "pattern", "-e malicious --include=*.secret", "dir/"]);
+        let argv = s(&[
+            "-r",
+            "-n",
+            "pattern",
+            "-e malicious --include=*.secret",
+            "dir/",
+        ]);
         let result = inject_double_dash(argv, InjectDoubleDash::AfterFlags);
         assert_eq!(
             result,
-            s(&["-r", "-n", "--", "pattern", "-e malicious --include=*.secret", "dir/"])
+            s(&[
+                "-r",
+                "-n",
+                "--",
+                "pattern",
+                "-e malicious --include=*.secret",
+                "dir/"
+            ])
         );
     }
 }

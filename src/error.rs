@@ -56,7 +56,10 @@ pub enum Violation {
 
     /// Binary is a risky type and policy denies it
     #[error("risky binary denied ({category}): {path}")]
-    BinRiskyDenied { path: String, category: RiskCategory },
+    BinRiskyDenied {
+        path: String,
+        category: RiskCategory,
+    },
 
     /// Binary path points to a directory
     #[error("binary path is a directory: {path}")]

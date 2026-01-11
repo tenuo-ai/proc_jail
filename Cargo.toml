@@ -1,19 +1,30 @@
+[workspace]
+members = [".", "python"]
+resolver = "2"
+
 [package]
 name = "proc_jail"
 version = "0.1.0"
 edition = "2021"
+rust-version = "1.75"
 license = "MIT OR Apache-2.0"
 description = "Process execution guard for agentic systems"
-repository = "https://github.com/anthropics/proc_jail"
+repository = "https://github.com/tenuo-ai/proc_jail"
+documentation = "https://docs.rs/proc_jail"
+readme = "README.md"
 keywords = ["security", "process", "sandbox", "injection", "agentic"]
 categories = ["os", "command-line-utilities"]
 
 [dependencies]
 tokio = { version = "1", features = ["process", "time", "io-util", "rt", "macros"] }
 thiserror = "1"
-tracing = "0.1"
+tracing = { version = "0.1", optional = true }
 libc = "0.2"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 tempfile = "3"
+
+[features]
+default = []
+tracing = ["dep:tracing"]

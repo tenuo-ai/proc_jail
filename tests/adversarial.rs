@@ -82,7 +82,10 @@ fn test_null_byte_in_argument() {
     // The argument with null byte should be treated as a literal string
     // It won't match anything but also won't cause injection
     let prepared = policy.prepare(request);
-    assert!(prepared.is_ok(), "Null in arg should be accepted as literal");
+    assert!(
+        prepared.is_ok(),
+        "Null in arg should be accepted as literal"
+    );
 
     std::fs::remove_file(tmp_file).ok();
 }
@@ -99,11 +102,11 @@ fn test_unicode_homoglyph_flag() {
 
     // These look like "-n" but use different dash characters
     let homoglyph_flags = [
-        "\u{2010}n",  // HYPHEN
-        "\u{2011}n",  // NON-BREAKING HYPHEN
-        "\u{2212}n",  // MINUS SIGN
-        "\u{FE63}n",  // SMALL HYPHEN-MINUS
-        "\u{FF0D}n",  // FULLWIDTH HYPHEN-MINUS
+        "\u{2010}n", // HYPHEN
+        "\u{2011}n", // NON-BREAKING HYPHEN
+        "\u{2212}n", // MINUS SIGN
+        "\u{FE63}n", // SMALL HYPHEN-MINUS
+        "\u{FF0D}n", // FULLWIDTH HYPHEN-MINUS
     ];
 
     for fake_flag in homoglyph_flags {
@@ -112,7 +115,7 @@ fn test_unicode_homoglyph_flag() {
         // These should be treated as positionals (don't start with ASCII '-')
         // OR if treated as flags, should be rejected as not in allowlist
         let result = policy.prepare(request);
-        
+
         // Either it's rejected as unknown flag, or it passes as positional
         // The key is it should NOT be treated as the allowed "-n" flag
         if let Ok(prepared) = result {
@@ -121,7 +124,10 @@ fn test_unicode_homoglyph_flag() {
             if argv.contains(&"--".to_string()) {
                 let dash_pos = argv.iter().position(|x| x == "--").unwrap();
                 let flag_pos = argv.iter().position(|x| x == fake_flag).unwrap();
-                assert!(dash_pos < flag_pos, "Homoglyph should be after -- (as positional)");
+                assert!(
+                    dash_pos < flag_pos,
+                    "Homoglyph should be after -- (as positional)"
+                );
             }
         }
         // If Err, that's also fine - the attack was blocked
@@ -157,9 +163,11 @@ fn test_unicode_in_env_var_name() {
     env.insert("LĐ_PRELOAD".to_string(), "/evil/lib.so".to_string());
     env.insert("LD\u{200B}_PRELOAD".to_string(), "/evil/lib.so".to_string()); // zero-width space
 
-    let allowed: std::collections::HashSet<String> = 
-        ["LĐ_PRELOAD", "LD\u{200B}_PRELOAD"].iter().map(|s| s.to_string()).collect();
-    
+    let allowed: std::collections::HashSet<String> = ["LĐ_PRELOAD", "LD\u{200B}_PRELOAD"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+
     let policy = EnvPolicy::AllowList(allowed);
     let result = policy.apply(&env);
 
@@ -377,7 +385,11 @@ fn test_flag_injection_via_positional() {
     let malicious_flag = "-f/etc/passwd";
     let request = ProcRequest::new(
         "/usr/bin/grep",
-        vec!["-n".to_string(), malicious_flag.to_string(), tmp_file.to_string()],
+        vec![
+            "-n".to_string(),
+            malicious_flag.to_string(),
+            tmp_file.to_string(),
+        ],
     );
     let result = policy.prepare(request);
     assert!(
@@ -390,13 +402,20 @@ fn test_flag_injection_via_positional() {
     let user_pattern = "search_term"; // Doesn't start with -
     let request = ProcRequest::new(
         "/usr/bin/grep",
-        vec!["-n".to_string(), user_pattern.to_string(), tmp_file.to_string()],
+        vec![
+            "-n".to_string(),
+            user_pattern.to_string(),
+            tmp_file.to_string(),
+        ],
     );
     let prepared = policy.prepare(request).unwrap();
     let argv = prepared.argv();
 
     // With double-dash injection, pattern should be after --
-    let dash_pos = argv.iter().position(|x| x == "--").expect("-- should be injected");
+    let dash_pos = argv
+        .iter()
+        .position(|x| x == "--")
+        .expect("-- should be injected");
     let pattern_pos = argv
         .iter()
         .position(|x| x == user_pattern)
@@ -494,7 +513,7 @@ fn test_env_case_sensitivity_bypass() {
         // Currently, only exact matches are stripped
         // This test documents the behavior - lowercase variants pass through
         // This is actually OK because the kernel is case-sensitive for these
-        
+
         // The real LD_PRELOAD (uppercase) should definitely be stripped
         assert!(
             !result.contains_key("LD_PRELOAD"),
@@ -510,9 +529,11 @@ fn test_env_with_dangerous_value() {
     env.insert("SAFE_VAR".to_string(), "$(rm -rf /)".to_string());
     env.insert("ANOTHER".to_string(), "; cat /etc/passwd".to_string());
 
-    let allowed: std::collections::HashSet<String> = 
-        ["SAFE_VAR", "ANOTHER"].iter().map(|s| s.to_string()).collect();
-    
+    let allowed: std::collections::HashSet<String> = ["SAFE_VAR", "ANOTHER"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+
     let policy = EnvPolicy::AllowList(allowed);
     let result = policy.apply(&env);
 
@@ -533,9 +554,7 @@ async fn test_stdout_limit_boundary() {
         .allow_bin("/bin/dd")
         .arg_rules(
             "/bin/dd",
-            ArgRules::new()
-                .max_flags(0)
-                .max_positionals(4), // dd operands are positionals (no leading -)
+            ArgRules::new().max_flags(0).max_positionals(4), // dd operands are positionals (no leading -)
         )
         .max_stdout(1000)
         .timeout(Duration::from_secs(5))
@@ -654,11 +673,7 @@ fn test_relative_path_with_slash() {
     // Attack: Use paths that look absolute but aren't
     let policy = permissive_grep_policy();
 
-    let attacks = [
-        "./usr/bin/grep",
-        "../usr/bin/grep", 
-        "usr/bin/grep",
-    ];
+    let attacks = ["./usr/bin/grep", "../usr/bin/grep", "usr/bin/grep"];
 
     for attack in attacks {
         let request = ProcRequest::new(attack, vec![]);
@@ -678,13 +693,13 @@ fn test_double_slash_in_path() {
     let policy = permissive_grep_policy();
 
     let request = ProcRequest::new("//usr//bin//grep", vec!["pattern".to_string()]);
-    
+
     // This should either:
     // 1. Canonicalize to /usr/bin/grep and work
     // 2. Fail for some other reason
     // It should NOT bypass the allowlist
     let result = policy.prepare(request);
-    
+
     // If it succeeds, verify it resolved correctly
     if let Ok(prepared) = result {
         assert!(
@@ -716,21 +731,17 @@ fn test_subcommand_injection_via_flag_value() {
 
     // Try various attacks
     let attacks = [
-        vec!["push".to_string()],  // Wrong subcommand
-        vec!["--porcelain".to_string()],  // Flag without subcommand
-        vec!["status".to_string(), "push".to_string()],  // Extra positional (subcommand)
+        vec!["push".to_string()],                       // Wrong subcommand
+        vec!["--porcelain".to_string()],                // Flag without subcommand
+        vec!["status".to_string(), "push".to_string()], // Extra positional (subcommand)
     ];
 
     for argv in attacks {
         let request = ProcRequest::new("/usr/bin/git", argv.clone());
         let result = policy.prepare(request);
-        
+
         // All should fail in some way
-        assert!(
-            result.is_err(),
-            "Attack {:?} should be blocked",
-            argv
-        );
+        assert!(result.is_err(), "Attack {:?} should be blocked", argv);
     }
 }
 
@@ -742,12 +753,7 @@ fn test_subcommand_injection_via_flag_value() {
 fn test_max_args_boundary() {
     let policy = ProcPolicy::builder()
         .allow_bin("/bin/echo")
-        .arg_rules(
-            "/bin/echo",
-            ArgRules::new()
-                .max_flags(0)
-                .max_positionals(3),
-        )
+        .arg_rules("/bin/echo", ArgRules::new().max_flags(0).max_positionals(3))
         .build()
         .unwrap();
 
@@ -761,7 +767,12 @@ fn test_max_args_boundary() {
     // One over limit - should fail
     let request = ProcRequest::new(
         "/bin/echo",
-        vec!["a".to_string(), "b".to_string(), "c".to_string(), "d".to_string()],
+        vec![
+            "a".to_string(),
+            "b".to_string(),
+            "c".to_string(),
+            "d".to_string(),
+        ],
     );
     assert!(matches!(
         policy.prepare(request),
@@ -782,4 +793,3 @@ fn test_very_long_argument() {
     let result = policy.prepare(request);
     assert!(result.is_ok(), "Long argument should be accepted by policy");
 }
-
