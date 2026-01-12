@@ -30,7 +30,7 @@ class ArgRules:
         >>> rules = rules.allowed_flags(["-n", "-i", "--color=never"])
         >>> rules = rules.max_flags(3)
         >>> rules = rules.max_positionals(10)
-        >>> rules = rules.inject_double_dash(InjectDoubleDash.AfterFlags)
+        >>> rules = rules.inject_double_dash()  # Defaults to AfterFlags
     """
     
     def __init__(self) -> None: ...
@@ -51,8 +51,12 @@ class ArgRules:
         """Set maximum number of positional arguments."""
         ...
     
-    def inject_double_dash(self, mode: InjectDoubleDash) -> ArgRules:
-        """Set double-dash injection mode."""
+    def inject_double_dash(self, mode: InjectDoubleDash | None = None) -> ArgRules:
+        """Set double-dash injection mode.
+        
+        Args:
+            mode: Injection mode. Defaults to AfterFlags if not specified.
+        """
         ...
 
 class ProcRequest:
@@ -166,8 +170,9 @@ class ProcPolicyBuilder:
         ...     .arg_rules("/usr/bin/grep", ArgRules()
         ...         .allowed_flags(["-n", "-i"])
         ...         .max_flags(2)
-        ...         .max_positionals(10))
-        ...     .timeout_secs(30)
+        ...         .max_positionals(10)
+        ...         .inject_double_dash())
+        ...     .timeout(30)
         ...     .build())
     """
     
@@ -183,6 +188,14 @@ class ProcPolicyBuilder:
     
     def risky_bin_policy(self, policy: RiskyBinPolicy) -> ProcPolicyBuilder:
         """Set risky binary policy."""
+        ...
+    
+    def allow_risky_binaries(self) -> ProcPolicyBuilder:
+        """Allow risky binaries (shells, interpreters, etc.) to be executed.
+        
+        Convenience method equivalent to .risky_bin_policy(RiskyBinPolicy.Disabled).
+        WARNING: Only use if you understand the security implications.
+        """
         ...
     
     def env_empty(self) -> ProcPolicyBuilder:
@@ -207,6 +220,10 @@ class ProcPolicyBuilder:
     
     def timeout_secs(self, secs: int) -> ProcPolicyBuilder:
         """Set timeout in seconds."""
+        ...
+    
+    def timeout(self, secs: int) -> ProcPolicyBuilder:
+        """Set timeout in seconds (convenience alias for timeout_secs)."""
         ...
     
     def max_stdout(self, max: int) -> ProcPolicyBuilder:

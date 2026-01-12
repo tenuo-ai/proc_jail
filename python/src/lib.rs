@@ -154,7 +154,15 @@ impl ArgRules {
     }
 
     /// Set double-dash injection mode.
-    fn inject_double_dash(&self, mode: InjectDoubleDash) -> Self {
+    ///
+    /// Args:
+    ///     mode: Injection mode (default: AfterFlags for secure double-dash insertion)
+    ///
+    /// When called without arguments, defaults to AfterFlags which inserts `--`
+    /// between flags and positional arguments to prevent flag injection.
+    #[pyo3(signature = (mode=None))]
+    fn inject_double_dash(&self, mode: Option<InjectDoubleDash>) -> Self {
+        let mode = mode.unwrap_or(InjectDoubleDash::AfterFlags);
         Self {
             inner: self.inner.clone().inject_double_dash(mode.into()),
         }
@@ -428,6 +436,16 @@ impl ProcPolicyBuilder {
         new
     }
 
+    /// Allow risky binaries (shells, interpreters, etc.) to be executed.
+    ///
+    /// This is a convenience method equivalent to:
+    ///     .risky_bin_policy(RiskyBinPolicy.Disabled)
+    ///
+    /// WARNING: Only use this if you understand the security implications.
+    fn allow_risky_binaries(&self) -> Self {
+        self.risky_bin_policy(RiskyBinPolicy::Disabled)
+    }
+
     /// Set environment policy to empty (default).
     fn env_empty(&self) -> Self {
         let mut new = self.clone();
@@ -468,6 +486,11 @@ impl ProcPolicyBuilder {
         let mut new = self.clone();
         new.timeout_secs = secs;
         new
+    }
+
+    /// Set timeout in seconds (convenience alias for timeout_secs).
+    fn timeout(&self, secs: u64) -> Self {
+        self.timeout_secs(secs)
     }
 
     /// Set maximum stdout bytes.
