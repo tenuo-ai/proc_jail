@@ -63,7 +63,6 @@ jobs:
         env:
           RUSTDOCFLAGS: -D warnings
 
-
   python:
     name: Python Bindings
     runs-on: ubuntu-latest
@@ -80,7 +79,7 @@ jobs:
         run: maturin build
       - name: Test imports
         run: |
-          pip install $(find python/target -name '*.whl' | head -1)
+          pip install target/wheels/*.whl
           python -c "
           from proc_jail import (
               ProcPolicyBuilder, ProcRequest, ArgRules,
@@ -105,10 +104,9 @@ jobs:
       - name: Install dependencies
         run: pip install maturin pytest
       - name: Build and install
-        working-directory: python
         run: |
-          maturin build
-          pip install $(find target -name '*.whl' | head -1)
+          cd python && maturin build
+          pip install target/wheels/*.whl
       - name: Run Python tests
         working-directory: python
         run: pytest tests/ -v --tb=short
