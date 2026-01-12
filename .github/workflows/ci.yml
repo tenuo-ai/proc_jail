@@ -79,7 +79,8 @@ jobs:
         run: maturin build
       - name: Test imports
         run: |
-          pip install target/wheels/*.whl
+          WHEEL=$(ls target/wheels/*.whl | head -1)
+          pip install "$WHEEL"
           python -c "
           from proc_jail import (
               ProcPolicyBuilder, ProcRequest, ArgRules,
@@ -106,7 +107,8 @@ jobs:
       - name: Build and install
         run: |
           cd python && maturin build
-          pip install target/wheels/*.whl
+          WHEEL=$(ls ../target/wheels/*.whl | head -1)
+          pip install "$WHEEL"
       - name: Run Python tests
         working-directory: python
         run: pytest tests/ -v --tb=short
