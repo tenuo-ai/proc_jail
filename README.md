@@ -175,14 +175,48 @@ ProcPolicyBuilder()
 
 **Unix only** (Linux, macOS). Windows is not supported because `CreateProcess` passes arguments as a single string that each program parses differently, making injection prevention impossible to guarantee. See [docs/windows.md](docs/windows.md) for details.
 
-## Integration with Tenuo Ecosystem
+## Related Projects
 
-| Crate | Threat | Boundary |
-|-------|--------|----------|
-| `path_jail` | Path traversal | Filesystem |
-| `safe_unzip` | Zip Slip / bombs | Archive extraction |
-| `url_jail` | SSRF | Network |
-| `proc_jail` | Command injection | Process spawning |
+| Project | Description | PyPI/Crates.io |
+|---------|-------------|----------------|
+| [path_jail](https://github.com/tenuo-ai/path_jail) | Path traversal prevention | [![PyPI](https://img.shields.io/pypi/v/path-jail.svg)](https://pypi.org/project/path-jail/) |
+| [url_jail](https://github.com/tenuo-ai/url_jail) | SSRF-safe URL validation | [![PyPI](https://img.shields.io/pypi/v/url-jail.svg)](https://pypi.org/project/url-jail/) |
+| [safe_unzip](https://github.com/tenuo-ai/safe_unzip) | Zip Slip and zip bomb prevention | [![PyPI](https://img.shields.io/pypi/v/safe-unzip.svg)](https://pypi.org/project/safe-unzip/) |
+| [tenuo](https://github.com/tenuo-ai/tenuo) | Capability-based authorization for AI agents | [![PyPI](https://img.shields.io/pypi/v/tenuo.svg)](https://pypi.org/project/tenuo/) |
+
+## Integration with Tenuo
+
+`proc_jail` provides the execution layer, while [Tenuo](https://github.com/tenuo-ai/tenuo) provides cryptographic authorization. Together they offer defense in depth:
+
+```python
+from proc_jail import ProcPolicyBuilder, ProcRequest, ArgRules
+
+# proc_jail handles the safe execution
+# Tenuo handles the authorization (who can call which tools)
+
+def execute_grep(user_query: str, target_file: str) -> str:
+    """Execute grep with proc_jail protection."""
+    policy = (
+        ProcPolicyBuilder()
+        .allow_bin("/usr/bin/grep")
+        .arg_rules("/usr/bin/grep", 
+            ArgRules()
+            .allowed_flags(["-n", "-i"])
+            .max_positionals(10)
+            .inject_double_dash())
+        .timeout(30)
+        .build()
+    )
+    
+    # Even if user_query = "'; rm -rf / #", it's treated as a literal string
+    request = ProcRequest("/usr/bin/grep", ["-n", user_query, target_file])
+    output = policy.prepare(request).spawn_sync()
+    return output.stdout_string()
+```
+
+**Why both?**
+- **Tenuo**: Cryptographic proof the agent is authorized for this tool
+- **proc_jail**: Prevents command injection even if the agent is compromised
 
 ## Documentation
 
