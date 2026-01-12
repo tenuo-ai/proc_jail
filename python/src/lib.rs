@@ -3,17 +3,18 @@
 //! This module provides Python wrappers around the Rust proc_jail crate,
 //! enabling secure process execution from Python applications.
 
+#![allow(clippy::useless_conversion)]
+
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
 use std::collections::HashMap;
 use std::time::Duration;
 
 use proc_jail::{
-    ArgRules as RustArgRules, CwdPolicy as RustCwdPolicy, EnvPolicy as RustEnvPolicy,
-    ExecError, InjectDoubleDash as RustInjectDoubleDash, Output as RustOutput,
-    ProcPolicy as RustProcPolicy, ProcRequest as RustProcRequest,
-    RiskCategory as RustRiskCategory, RiskyBinPolicy as RustRiskyBinPolicy,
-    Violation as RustViolation,
+    ArgRules as RustArgRules, CwdPolicy as RustCwdPolicy, EnvPolicy as RustEnvPolicy, ExecError,
+    InjectDoubleDash as RustInjectDoubleDash, Output as RustOutput, ProcPolicy as RustProcPolicy,
+    ProcRequest as RustProcRequest, RiskCategory as RustRiskCategory,
+    RiskyBinPolicy as RustRiskyBinPolicy, Violation as RustViolation,
 };
 
 // =============================================================================
@@ -160,8 +161,10 @@ impl ArgRules {
     }
 
     fn __repr__(&self) -> String {
-        format!("ArgRules(max_flags={}, max_positionals={})", 
-                self.inner.max_flags, self.inner.max_positionals)
+        format!(
+            "ArgRules(max_flags={}, max_positionals={})",
+            self.inner.max_flags, self.inner.max_positionals
+        )
     }
 }
 
@@ -223,7 +226,11 @@ impl ProcRequest {
     }
 
     fn __repr__(&self) -> String {
-        format!("ProcRequest('{}', {:?})", self.inner.bin.display(), self.inner.argv)
+        format!(
+            "ProcRequest('{}', {:?})",
+            self.inner.bin.display(),
+            self.inner.argv
+        )
     }
 }
 
@@ -580,4 +587,3 @@ fn _proc_jail(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<ProcPolicy>()?;
     Ok(())
 }
-

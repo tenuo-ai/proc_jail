@@ -196,7 +196,7 @@ mod tests {
 
         assert_eq!(result.get("PATH"), Some(&"/usr/bin".to_string()));
         assert_eq!(result.get("HOME"), Some(&"/home/user".to_string()));
-        assert!(result.get("SECRET").is_none());
+        assert!(!result.contains_key("SECRET"));
     }
 
     #[test]
@@ -208,8 +208,8 @@ mod tests {
         let policy = EnvPolicy::Fixed(fixed);
         let result = policy.apply(&HashMap::new());
 
-        assert!(result.get("HOME").is_some());
-        assert!(result.get("LD_PRELOAD").is_none());
+        assert!(result.contains_key("HOME"));
+        assert!(!result.contains_key("LD_PRELOAD"));
     }
 
     #[test]
@@ -229,10 +229,10 @@ mod tests {
         let result = policy.apply(&request_env);
 
         // Dangerous vars stripped even though in allowlist
-        assert!(result.get("LD_PRELOAD").is_none());
-        assert!(result.get("PYTHONPATH").is_none());
+        assert!(!result.contains_key("LD_PRELOAD"));
+        assert!(!result.contains_key("PYTHONPATH"));
         // Safe var passes
-        assert!(result.get("HOME").is_some());
+        assert!(result.contains_key("HOME"));
     }
 
     #[test]
