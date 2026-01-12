@@ -123,7 +123,7 @@ No special handling. You're on your own. Only use this if you have external secu
 3. **Don't rely solely on this list**:
    - New risky binaries may not be listed
    - Version-specific variants may be missed
-   - Symlinks may point to risky binaries
+   - Symlinks are resolved before checking, but renamed binaries may be missed
 
 4. **Defense in depth**:
    - Use seccomp/AppArmor/SELinux for kernel-level restrictions

@@ -305,6 +305,8 @@ fn test_path_traversal_in_binary() {
         let result = policy.prepare(request);
 
         // After canonicalization, these should resolve to /bin/bash which is not allowed
+        // OR canonicalization may fail if the path is invalid (e.g., /usr/bin/grep/../ on Linux
+        // where grep is a file, not a directory)
         match result {
             Err(Violation::BinNotAllowed { canonical, .. }) => {
                 assert!(
@@ -320,6 +322,9 @@ fn test_path_traversal_in_binary() {
             }
             Err(Violation::ArgFlagNotAllowed { .. }) => {
                 // --version not allowed, also fine
+            }
+            Err(Violation::BinCanonicalizeFailed { .. }) => {
+                // Canonicalization failed (e.g., traversal through file, not dir), also blocks attack
             }
             Ok(_) => panic!("Path traversal '{}' should not succeed", attack),
             Err(e) => panic!("Unexpected error for '{}': {:?}", attack, e),
