@@ -12,5 +12,5 @@ crate-type = ["cdylib"]
 
 [dependencies]
 proc_jail = { path = ".." }
-pyo3 = { version = "0.22", features = ["extension-module"] }
+pyo3 = { version = "0.24", features = ["extension-module"] }
 tokio = { version = "1", features = ["rt-multi-thread"] }
