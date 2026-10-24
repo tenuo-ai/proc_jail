@@ -403,10 +403,12 @@ class TestWrapper:
             "/bin/sh", ["-c", 'echo wrapped; exec "$@"', "launcher"]
         )
 
-        assert prepared.bin == "/bin/echo"
+        # /bin may be a symlink to /usr/bin; bin is the canonical path.
+        echo = os.path.realpath("/bin/echo")
+        assert prepared.bin == echo
         assert prepared.argv == ["hello"]
         assert prepared.launch_program == "/bin/sh"
-        assert prepared.launch_args[-2:] == ["/bin/echo", "hello"]
+        assert prepared.launch_args[-2:] == [echo, "hello"]
 
         output = prepared.with_launch_env("TMPDIR", "/tmp").spawn_sync()
         assert output.stdout_string() == "wrapped\nhello\n"

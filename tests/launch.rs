@@ -129,20 +129,19 @@ async fn test_wrap_with_launches_through_program() {
         .unwrap()
         .wrap_with("/bin/sh", ["-c", "echo wrapped; exec \"$@\"", "launcher"]);
 
-    // Accessors still describe the validated command.
-    assert_eq!(prepared.bin(), Path::new("/bin/echo"));
+    // Accessors still describe the validated (canonical) command; /bin may
+    // be a symlink to /usr/bin.
+    let echo = std::fs::canonicalize("/bin/echo").unwrap();
+    assert_eq!(prepared.bin(), &echo);
     assert_eq!(prepared.argv(), ["hello".to_string()]);
     assert_eq!(prepared.launch_program(), Path::new("/bin/sh"));
-    let expected: Vec<OsString> = [
-        "-c",
-        "echo wrapped; exec \"$@\"",
-        "launcher",
-        "/bin/echo",
-        "hello",
-    ]
-    .iter()
-    .map(OsString::from)
-    .collect();
+    let expected: Vec<OsString> = vec![
+        "-c".into(),
+        "echo wrapped; exec \"$@\"".into(),
+        "launcher".into(),
+        echo.into_os_string(),
+        "hello".into(),
+    ];
     assert_eq!(prepared.launch_args(), expected);
 
     let output = prepared.spawn().await.unwrap();
