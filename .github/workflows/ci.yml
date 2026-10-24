@@ -23,13 +23,18 @@ jobs:
         rust: [stable, "1.75"]  # stable + MSRV
     steps:
       - uses: actions/checkout@v4
+      # Stable cargo resolves the lockfile; MSRV-aware fallback keeps
+      # dependencies compatible with rust-version on the MSRV job.
+      - uses: dtolnay/rust-toolchain@stable
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.rust }}
       - uses: Swatinem/rust-cache@v2
       - name: Generate Cargo.lock
-        run: cargo generate-lockfile
-      - run: cargo test --features tracing
+        run: cargo +stable generate-lockfile
+        env:
+          CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
+      - run: cargo +${{ matrix.rust }} test --features tracing
 
   clippy:
     name: Clippy

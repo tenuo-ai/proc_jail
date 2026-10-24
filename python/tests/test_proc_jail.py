@@ -387,3 +387,28 @@ class TestSymlinkResolution:
         with pytest.raises(ValueError, match="not allowed|risky"):
             policy.prepare(request)
 
+
+
+class TestWrapper:
+    """Tests for launching through a wrapper program."""
+
+    def test_wrap_with(self):
+        policy = (
+            ProcPolicyBuilder()
+            .allow_bin("/bin/echo")
+            .arg_rules("/bin/echo", ArgRules().max_positionals(1))
+            .build()
+        )
+        prepared = policy.prepare(ProcRequest("/bin/echo", ["hello"])).wrap_with(
+            "/bin/sh", ["-c", 'echo wrapped; exec "$@"', "launcher"]
+        )
+
+        # /bin may be a symlink to /usr/bin; bin is the canonical path.
+        echo = os.path.realpath("/bin/echo")
+        assert prepared.bin == echo
+        assert prepared.argv == ["hello"]
+        assert prepared.launch_program == "/bin/sh"
+        assert prepared.launch_args[-2:] == [echo, "hello"]
+
+        output = prepared.with_launch_env("TMPDIR", "/tmp").spawn_sync()
+        assert output.stdout_string() == "wrapped\nhello\n"

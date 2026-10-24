@@ -171,6 +171,22 @@ ProcPolicyBuilder()
     .max_stderr(1048576)   # 1 MB
 ```
 
+The command runs in its own process group. When a limit is hit, or when the command exits, the whole group is killed with SIGKILL, so grandchildren (for example `npm run build` → `node`) do not outlive the call.
+
+### Launching Through a Wrapper
+
+To run a validated command inside an OS sandbox, launch it through the sandbox's launcher. Validation still applies to the original binary and arguments; the wrapper and launch env are trusted caller input.
+
+```rust
+let prepared = policy
+    .prepare(request)?
+    .wrap_with("/usr/bin/sandbox-exec", ["-p", &profile])  // sandbox-exec -p <profile> <bin> <argv...>
+    .with_launch_env("TMPDIR", sandbox_tmp);                // added after the env policy
+let output = prepared.spawn().await?;
+```
+
+`bin()`/`argv()` still return the validated command; `launch_program()`/`launch_args()` return what is executed. Python exposes the same methods on `PreparedCommand`.
+
 ## Platform Support
 
 **Unix only** (Linux, macOS). Windows is not supported because `CreateProcess` passes arguments as a single string that each program parses differently, making injection prevention impossible to guarantee. See [docs/windows.md](docs/windows.md) for details.

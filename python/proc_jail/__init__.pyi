@@ -161,6 +161,27 @@ class PreparedCommand:
         """Get the working directory."""
         ...
 
+    def wrap_with(self, program: str, args_before: list[str]) -> "PreparedCommand":
+        """Return a copy that runs as `program args_before... bin argv...`.
+
+        Validation still applies to the original bin/argv.
+        """
+        ...
+
+    def with_launch_env(self, key: str, value: str) -> "PreparedCommand":
+        """Return a copy with an env var added after the env policy."""
+        ...
+
+    @property
+    def launch_program(self) -> str:
+        """Get the program that will be executed."""
+        ...
+
+    @property
+    def launch_args(self) -> list[str]:
+        """Get the arguments passed to launch_program."""
+        ...
+
 class ProcPolicyBuilder:
     """Process execution policy builder.
     

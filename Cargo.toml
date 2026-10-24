@@ -16,7 +16,7 @@ keywords = ["security", "process", "sandbox", "injection", "agentic"]
 categories = ["os", "command-line-utilities"]
 
 [dependencies]
-tokio = { version = "1", features = ["process", "time", "io-util", "rt", "macros"] }
+tokio = { version = "1", features = ["process", "time", "io-util", "rt", "macros", "signal"] }
 thiserror = "1"
 tracing = { version = "0.1", optional = true }
 libc = "0.2"

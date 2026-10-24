@@ -4,8 +4,8 @@ use std::time::Duration;
 
 /// Resource limits applied during process execution.
 ///
-/// When any limit is exceeded, the process is killed with SIGKILL
-/// and partial output up to the limit is captured.
+/// When any limit is exceeded, the process and its process group
+/// (including grandchildren) are killed with SIGKILL.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ResourceLimits {
     /// Wall-clock timeout for the process.
