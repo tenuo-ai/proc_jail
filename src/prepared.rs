@@ -91,6 +91,9 @@ impl PreparedCommand {
     /// - `ExecError::Timeout` if the process exceeded the timeout
     /// - `ExecError::StdoutLimitExceeded` if stdout exceeded the limit
     /// - `ExecError::StderrLimitExceeded` if stderr exceeded the limit
+    ///
+    /// The command runs in its own process group. On error, or once the
+    /// command exits, any processes still in that group are killed.
     pub async fn spawn(self) -> Result<Output, ExecError> {
         let start = Instant::now();
 
@@ -181,12 +184,26 @@ impl PreparedCommand {
             Ok((stdout_buf, stderr_buf))
         };
 
+        // Read output, then wait for the child to exit without reaping it, so
+        // its pid (and process group id) stays reserved while we clean up.
+        let run = async {
+            let bufs = read_future.await?;
+            let exited = match pgid {
+                Some(pid) => wait_exited(pid).await,
+                None => false,
+            };
+            Ok::<_, ExecError>((bufs, exited))
+        };
+
         // Apply timeout
-        let result = timeout(limits.timeout, read_future).await;
+        let result = timeout(limits.timeout, run).await;
 
         match result {
-            Ok(Ok((stdout_buf, stderr_buf))) => {
-                // Wait for process to complete
+            Ok(Ok(((stdout_buf, stderr_buf), exited))) => {
+                // Kill anything the command left running in its group
+                if exited {
+                    kill_process_group(pgid);
+                }
                 let status = child.wait().await.map_err(|e| ExecError::SpawnFailed {
                     reason: format!("wait error: {}", e),
                 })?;
@@ -291,6 +308,30 @@ impl PreparedCommand {
     pub fn cwd(&self) -> &PathBuf {
         &self.cwd
     }
+}
+
+/// Wait until the child `pid` has exited, leaving it unreaped (`WNOWAIT`).
+///
+/// Returns `false` if the state could not be observed (for example the child
+/// was already reaped), in which case its group id must not be signalled.
+async fn wait_exited(pid: u32) -> bool {
+    let id: libc::id_t = pid;
+    tokio::task::spawn_blocking(move || loop {
+        // SAFETY: siginfo_t is plain data; zeroed is a valid initial value and
+        // waitid only writes into it.
+        let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
+        // SAFETY: `info` is a valid, writable siginfo_t for the duration of the call.
+        let ret =
+            unsafe { libc::waitid(libc::P_PID, id, &mut info, libc::WEXITED | libc::WNOWAIT) };
+        if ret == 0 {
+            return true;
+        }
+        if std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted {
+            return false;
+        }
+    })
+    .await
+    .unwrap_or(false)
 }
 
 /// SIGKILL the process group led by `pgid` (the child spawned with `process_group(0)`).

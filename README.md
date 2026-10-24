@@ -171,7 +171,7 @@ ProcPolicyBuilder()
     .max_stderr(1048576)   # 1 MB
 ```
 
-The command runs in its own process group. When a limit is hit, the whole group is killed with SIGKILL, so grandchildren (for example `npm run build` → `node`) do not outlive the call.
+The command runs in its own process group. When a limit is hit, or when the command exits, the whole group is killed with SIGKILL, so grandchildren (for example `npm run build` → `node`) do not outlive the call.
 
 ### Launching Through a Wrapper
 

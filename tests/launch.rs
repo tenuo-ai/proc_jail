@@ -204,3 +204,40 @@ fn test_wrap_does_not_bypass_validation() {
         .prepare(ProcRequest::new("/bin/cat", vec![]))
         .is_err());
 }
+
+#[tokio::test]
+async fn test_normal_exit_kills_leftover_descendants() {
+    let dir = tempfile::tempdir().unwrap();
+    let pid_file = dir.path().join("pid");
+    // The background sleep does not hold the pipes, so the call can finish.
+    let script = format!(
+        "/bin/sleep 30 >/dev/null 2>&1 & echo $! > {}; echo done",
+        pid_file.display()
+    );
+
+    let prepared = sh_policy(Duration::from_secs(10))
+        .prepare(sh(&script))
+        .unwrap();
+    let start = Instant::now();
+    let output = prepared.spawn().await.unwrap();
+
+    assert!(output.success());
+    assert_eq!(output.stdout_string(), "done\n");
+    assert!(start.elapsed() < Duration::from_secs(5));
+    let pid = read_pid(&pid_file);
+    assert!(wait_gone(pid), "leftover {} survived normal exit", pid);
+}
+
+#[tokio::test]
+async fn test_timeout_covers_child_that_closes_pipes() {
+    // The child closes stdout/stderr and keeps running; the timeout must
+    // still apply while waiting for it to exit.
+    let prepared = sh_policy(Duration::from_millis(300))
+        .prepare(sh("exec >/dev/null 2>&1; exec /bin/sleep 30"))
+        .unwrap();
+    let start = Instant::now();
+    let result = prepared.spawn().await;
+
+    assert!(matches!(result, Err(ExecError::Timeout { .. })));
+    assert!(start.elapsed() < Duration::from_secs(5));
+}
