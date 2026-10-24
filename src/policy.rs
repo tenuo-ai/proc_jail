@@ -105,6 +105,8 @@ impl ProcPolicy {
             env,
             cwd,
             limits: self.limits,
+            wrapper: None,
+            launch_env: Vec::new(),
         })
     }
 }

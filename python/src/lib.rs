@@ -344,16 +344,49 @@ impl PreparedCommand {
             .map_err(exec_error_to_py_err)
     }
 
-    /// Get the binary path.
+    /// Return a copy that launches through `program`.
+    ///
+    /// The process runs as `program args_before... bin argv...`. Validation
+    /// still applies to the original bin/argv; the wrapper is trusted input.
+    fn wrap_with(&self, program: &str, args_before: Vec<String>) -> Self {
+        Self {
+            inner: self.inner.clone().wrap_with(program, args_before),
+        }
+    }
+
+    /// Return a copy with an environment variable added after the env policy.
+    fn with_launch_env(&self, key: &str, value: &str) -> Self {
+        Self {
+            inner: self.inner.clone().with_launch_env(key, value),
+        }
+    }
+
+    /// Get the validated binary path (unchanged by wrap_with).
     #[getter]
     fn bin(&self) -> String {
         self.inner.bin().display().to_string()
     }
 
-    /// Get the validated arguments.
+    /// Get the validated arguments (unchanged by wrap_with).
     #[getter]
     fn argv(&self) -> Vec<String> {
         self.inner.argv().to_vec()
+    }
+
+    /// Get the program that will be executed.
+    #[getter]
+    fn launch_program(&self) -> String {
+        self.inner.launch_program().display().to_string()
+    }
+
+    /// Get the arguments passed to launch_program.
+    #[getter]
+    fn launch_args(&self) -> Vec<String> {
+        self.inner
+            .launch_args()
+            .into_iter()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect()
     }
 
     /// Get the working directory.
