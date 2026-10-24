@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
-use std::time::Instant;
+use std::time::{Duration, Instant};
 use tokio::io::AsyncReadExt;
 use tokio::process::Command;
 use tokio::time::timeout;
@@ -184,23 +184,28 @@ impl PreparedCommand {
             Ok((stdout_buf, stderr_buf))
         };
 
-        // Read output, then wait for the child to exit without reaping it, so
-        // its pid (and process group id) stays reserved while we clean up.
-        let run = async {
-            let bufs = read_future.await?;
+        // Read output while watching for the child to exit. Its exit is
+        // observed without reaping it, so its pid (and process group id) stays
+        // reserved; once it exits, the rest of its group is killed so that
+        // descendants holding the pipes open cannot stall the read.
+        let watch = async {
             let exited = match pgid {
                 Some(pid) => wait_exited(pid).await,
                 None => false,
             };
-            Ok::<_, ExecError>((bufs, exited))
+            if exited {
+                kill_process_group(pgid);
+            }
+            Ok::<_, ExecError>(exited)
         };
+        let run = async { tokio::try_join!(read_future, watch) };
 
         // Apply timeout
         let result = timeout(limits.timeout, run).await;
 
         match result {
             Ok(Ok(((stdout_buf, stderr_buf), exited))) => {
-                // Kill anything the command left running in its group
+                // Kill anything still left in the group after the pipes closed
                 if exited {
                     kill_process_group(pgid);
                 }
@@ -312,26 +317,62 @@ impl PreparedCommand {
 
 /// Wait until the child `pid` has exited, leaving it unreaped (`WNOWAIT`).
 ///
+/// Polls with `WNOHANG` on each SIGCHLD (and on a fallback interval), so the
+/// future can be dropped at any point without leaving a blocked thread.
+///
 /// Returns `false` if the state could not be observed (for example the child
 /// was already reaped), in which case its group id must not be signalled.
 async fn wait_exited(pid: u32) -> bool {
+    use tokio::signal::unix::{signal, SignalKind};
+
+    // Register before the first check so an exit in between is not missed.
+    let mut sigchld = signal(SignalKind::child()).ok();
+    loop {
+        match poll_exited(pid) {
+            Some(exited) => return exited,
+            None => {
+                let tick = tokio::time::sleep(Duration::from_millis(50));
+                match sigchld.as_mut() {
+                    Some(sig) => {
+                        tokio::select! {
+                            _ = sig.recv() => {}
+                            _ = tick => {}
+                        }
+                    }
+                    None => tick.await,
+                }
+            }
+        }
+    }
+}
+
+/// Non-blocking exit check: `Some(true)` if exited, `None` if still running,
+/// `Some(false)` if the state cannot be observed.
+fn poll_exited(pid: u32) -> Option<bool> {
     let id: libc::id_t = pid;
-    tokio::task::spawn_blocking(move || loop {
+    loop {
         // SAFETY: siginfo_t is plain data; zeroed is a valid initial value and
         // waitid only writes into it.
         let mut info: libc::siginfo_t = unsafe { std::mem::zeroed() };
         // SAFETY: `info` is a valid, writable siginfo_t for the duration of the call.
-        let ret =
-            unsafe { libc::waitid(libc::P_PID, id, &mut info, libc::WEXITED | libc::WNOWAIT) };
+        let ret = unsafe {
+            libc::waitid(
+                libc::P_PID,
+                id,
+                &mut info,
+                libc::WEXITED | libc::WNOWAIT | libc::WNOHANG,
+            )
+        };
         if ret == 0 {
-            return true;
+            // With WNOHANG, si_pid stays 0 while the child is still running.
+            // SAFETY: waitid filled `info` (or left it zeroed).
+            let si_pid = unsafe { info.si_pid() };
+            return if si_pid == 0 { None } else { Some(true) };
         }
         if std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted {
-            return false;
+            return Some(false);
         }
-    })
-    .await
-    .unwrap_or(false)
+    }
 }
 
 /// SIGKILL the process group led by `pgid` (the child spawned with `process_group(0)`).

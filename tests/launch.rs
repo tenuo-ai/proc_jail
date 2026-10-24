@@ -240,3 +240,60 @@ async fn test_timeout_covers_child_that_closes_pipes() {
     assert!(matches!(result, Err(ExecError::Timeout { .. })));
     assert!(start.elapsed() < Duration::from_secs(5));
 }
+
+#[tokio::test]
+async fn test_normal_exit_with_descendant_holding_pipes() {
+    let dir = tempfile::tempdir().unwrap();
+    let pid_file = dir.path().join("pid");
+    // The background sleep inherits stdout/stderr; the call must still return
+    // the shell's output once the shell exits.
+    let script = format!(
+        "/bin/sleep 30 & echo $! > {}; echo done",
+        pid_file.display()
+    );
+
+    let prepared = sh_policy(Duration::from_secs(10))
+        .prepare(sh(&script))
+        .unwrap();
+    let start = Instant::now();
+    let output = prepared.spawn().await.unwrap();
+
+    assert!(output.success());
+    assert_eq!(output.stdout_string(), "done\n");
+    assert!(start.elapsed() < Duration::from_secs(5));
+    let pid = read_pid(&pid_file);
+    assert!(wait_gone(pid), "descendant {} survived normal exit", pid);
+}
+
+#[test]
+fn test_dropped_spawn_does_not_block_runtime_shutdown() {
+    let dir = tempfile::tempdir().unwrap();
+    let pid_file = dir.path().join("pid");
+    // Closes its pipes and keeps running, so spawn() is waiting for exit.
+    let script = format!(
+        "echo $$ > {}; exec >/dev/null 2>&1; exec /bin/sleep 30",
+        pid_file.display()
+    );
+    let prepared = sh_policy(Duration::from_secs(30))
+        .prepare(sh(&script))
+        .unwrap();
+
+    let start = Instant::now();
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+    let result = rt.block_on(async {
+        tokio::time::timeout(Duration::from_millis(300), prepared.spawn()).await
+    });
+    drop(rt);
+
+    assert!(result.is_err(), "spawn should still be waiting");
+    assert!(start.elapsed() < Duration::from_secs(5));
+
+    // Dropping spawn() does not kill the child; clean it up here.
+    let pid = read_pid(&pid_file);
+    unsafe {
+        libc::kill(pid, libc::SIGKILL);
+    }
+}
