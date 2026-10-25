@@ -34,6 +34,8 @@ jobs:
         env:
           CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
       - uses: rustsec/audit-check@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
 
   test:
     name: Test (${{ matrix.os }}, Rust ${{ matrix.rust }})
