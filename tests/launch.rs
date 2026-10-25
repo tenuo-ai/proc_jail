@@ -60,6 +60,23 @@ fn read_pid(path: &Path) -> i32 {
 }
 
 #[tokio::test]
+async fn test_dropping_spawn_kills_the_group() {
+    let dir = tempfile::tempdir().unwrap();
+    let pid_file = dir.path().join("pid");
+    let script = format!("/bin/sleep 30 & echo $! > {}; wait", pid_file.display());
+
+    let prepared = sh_policy(Duration::from_secs(30))
+        .prepare(sh(&script))
+        .unwrap();
+    // The caller gives up long before the command's own timeout.
+    let cancelled = tokio::time::timeout(Duration::from_millis(300), prepared.spawn()).await;
+
+    assert!(cancelled.is_err());
+    let pid = read_pid(&pid_file);
+    assert!(wait_gone(pid), "grandchild {} survived cancellation", pid);
+}
+
+#[tokio::test]
 async fn test_timeout_kills_grandchildren() {
     let dir = tempfile::tempdir().unwrap();
     let pid_file = dir.path().join("pid");

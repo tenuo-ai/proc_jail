@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - An output limit on one stream no longer waits for the other stream to close
 - Processes the command leaves running in its group are killed when it exits
 - The timeout now also covers waiting for exit after the output pipes close
+- Dropping the future returned by `spawn()` kills the command's process group
 
 ## [0.1.0] - 2026-01-11
 
