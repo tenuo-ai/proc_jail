@@ -1,12 +1,12 @@
 # proc_jail
 
-Process execution guard for agentic systems.
+A fail-closed process execution guard for untrusted input, automation, and agentic systems.
 
 [![Crates.io](https://img.shields.io/crates/v/proc_jail.svg)](https://crates.io/crates/proc_jail)
 [![PyPI](https://img.shields.io/pypi/v/proc_jail.svg)](https://pypi.org/project/proc_jail/)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
 
-`proc_jail` provides a safe wrapper around process spawning, enforcing deterministic bounds on process execution to prevent command injection, unauthorized binary execution, and resource abuse.
+`proc_jail` provides a policy-enforced wrapper around process spawning for Rust and Python. It applies deterministic bounds to commands derived from untrusted input, helping prevent command injection, unauthorized binary execution, and resource abuse.
 
 ## Features
 

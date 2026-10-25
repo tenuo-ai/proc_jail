@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "proc_jail"
 version = "0.2.0"
-description = "Process execution guard for agentic systems"
+description = "Policy-enforced subprocess execution for untrusted input"
 readme = "../README.md"
 license = {text = "MIT OR Apache-2.0"}
 requires-python = ">=3.8"
