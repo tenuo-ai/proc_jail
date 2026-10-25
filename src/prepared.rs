@@ -93,7 +93,9 @@ impl PreparedCommand {
     /// - `ExecError::StderrLimitExceeded` if stderr exceeded the limit
     ///
     /// The command runs in its own process group. On error, or once the
-    /// command exits, any processes still in that group are killed.
+    /// command exits, any processes still in that group are killed. If the
+    /// returned future is dropped before it completes (for example because
+    /// the caller cancelled the run), the group is killed too.
     pub async fn spawn(self) -> Result<Output, ExecError> {
         let start = Instant::now();
 
@@ -115,6 +117,9 @@ impl PreparedCommand {
             reason: e.to_string(),
         })?;
         let pgid = child.id();
+        // Declared after `child`, so it is dropped first: the group is killed
+        // while the child is still unreaped and its group id still reserved.
+        let mut group = GroupGuard(pgid);
 
         // Take ownership of stdout/stderr
         let mut stdout = child.stdout.take().expect("stdout piped");
@@ -195,6 +200,10 @@ impl PreparedCommand {
             };
             if exited {
                 kill_process_group(pgid);
+            } else {
+                // The child may already have been reaped, so its pid/group id
+                // is no longer ours to signal and may be reused.
+                group.disarm();
             }
             Ok::<_, ExecError>(exited)
         };
@@ -209,6 +218,7 @@ impl PreparedCommand {
                 if exited {
                     kill_process_group(pgid);
                 }
+                group.disarm();
                 let status = child.wait().await.map_err(|e| ExecError::SpawnFailed {
                     reason: format!("wait error: {}", e),
                 })?;
@@ -222,6 +232,7 @@ impl PreparedCommand {
             Ok(Err(error)) => {
                 // Kill the process group on limit exceeded
                 kill_process_group(pgid);
+                group.disarm();
                 let _ = child.kill().await;
                 Err(error)
             }
@@ -229,6 +240,7 @@ impl PreparedCommand {
                 // Timeout - kill and return error
                 let elapsed = start.elapsed();
                 kill_process_group(pgid);
+                group.disarm();
                 let _ = child.kill().await;
                 Err(ExecError::Timeout {
                     limit: limits.timeout,
@@ -372,6 +384,22 @@ fn poll_exited(pid: u32) -> Option<bool> {
         if std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted {
             return Some(false);
         }
+    }
+}
+
+/// Kills the process group when dropped, unless disarmed first. Disarm it
+/// before reaping the child, after which the group id may be reused.
+struct GroupGuard(Option<u32>);
+
+impl GroupGuard {
+    fn disarm(&mut self) {
+        self.0 = None;
+    }
+}
+
+impl Drop for GroupGuard {
+    fn drop(&mut self) {
+        kill_process_group(self.0);
     }
 }
 
