@@ -254,21 +254,33 @@ impl PreparedCommand {
     ///
     /// This is a convenience wrapper that creates a runtime if needed.
     pub fn spawn_sync(self) -> Result<Output, ExecError> {
-        // Try to use existing runtime handle
-        if let Ok(handle) = tokio::runtime::Handle::try_current() {
-            // We're in an async context, use block_on
-            // Note: This can cause issues if called from within an async context
-            std::thread::scope(|s| s.spawn(|| handle.block_on(self.spawn())).join().unwrap())
+        if tokio::runtime::Handle::try_current().is_ok() {
+            // A current-thread runtime cannot make progress while this call
+            // blocks its only driver thread. Run an independent runtime on a
+            // helper thread instead of borrowing the surrounding runtime.
+            std::thread::scope(|scope| {
+                scope
+                    .spawn(move || self.spawn_on_new_runtime())
+                    .join()
+                    .unwrap_or_else(|_| {
+                        Err(ExecError::SpawnFailed {
+                            reason: "spawn worker thread panicked".to_string(),
+                        })
+                    })
+            })
         } else {
-            // Create a new runtime
-            let rt = tokio::runtime::Builder::new_current_thread()
-                .enable_all()
-                .build()
-                .map_err(|e| ExecError::SpawnFailed {
-                    reason: format!("failed to create runtime: {}", e),
-                })?;
-            rt.block_on(self.spawn())
+            self.spawn_on_new_runtime()
         }
+    }
+
+    fn spawn_on_new_runtime(self) -> Result<Output, ExecError> {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .map_err(|e| ExecError::SpawnFailed {
+                reason: format!("failed to create runtime: {}", e),
+            })?;
+        rt.block_on(self.spawn())
     }
 
     /// Get the validated binary path.

@@ -13,6 +13,28 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  versions:
+    name: Package versions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: python scripts/check_versions.py
+
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Generate Cargo.lock
+        run: cargo generate-lockfile
+        env:
+          CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
+      - uses: rustsec/audit-check@v2
+
   test:
     name: Test (${{ matrix.os }}, Rust ${{ matrix.rust }})
     runs-on: ${{ matrix.os }}
@@ -84,7 +106,7 @@ jobs:
         run: maturin build
       - name: Test imports
         run: |
-          WHEEL=$(ls target/wheels/*.whl | head -1)
+          WHEEL=$(find target/wheels -maxdepth 1 -name '*.whl' -print -quit)
           pip install "$WHEEL"
           python -c "
           from proc_jail import (
@@ -96,23 +118,25 @@ jobs:
           "
 
   python-tests:
-    name: Python Tests (${{ matrix.os }})
+    name: Python Tests (${{ matrix.os }}, ${{ matrix.python }})
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, macos-latest]
+        python: ["3.8", "3.15"]
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: ${{ matrix.python }}
       - name: Install dependencies
-        run: pip install maturin pytest
+        run: pip install "maturin>=1,<2" pytest
       - name: Build and install
         run: |
           cd python && maturin build
-          WHEEL=$(ls ../target/wheels/*.whl | head -1)
+          WHEEL=$(find ../target/wheels -maxdepth 1 -name '*.whl' -print -quit)
           pip install "$WHEEL"
       - name: Run Python tests
         working-directory: python

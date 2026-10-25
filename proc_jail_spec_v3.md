@@ -1,4 +1,4 @@
-# proc_jail v0.1 Specification
+# proc_jail Specification
 
 Process execution guard for agentic systems.
 
@@ -573,13 +573,13 @@ impl Default for ResourceLimits {
 
 When any limit is exceeded:
 
-1. proc_jail sends `SIGKILL` to the spawned process (Unix)
+1. proc_jail sends `SIGKILL` to the spawned process group (Unix)
 2. Partial output up to the limit is captured and returned
 3. Returns appropriate `ExecError` variant
 
-**Child process note:** Only the direct child is killed. Grandchild processes are NOT automatically killed. For full process tree termination, use process groups or container isolation.
+**Child process note:** Commands run in their own process group. proc_jail kills that group when a limit is exceeded, when the command exits, or when execution is cancelled. A process that deliberately creates a new session or joins another group can escape this cleanup; use a container or cgroup boundary for hostile binaries.
 
-**v0.1 scope:** Only `Kill` behavior is supported. `Truncate` (allow process to continue, truncate output) is deferred to v0.2.
+Only `Kill` behavior is supported. `Truncate` (allow the process to continue while truncating output) is not implemented.
 
 **Rationale:** Prevents hangs, runaway output, log bombs, resource exhaustion.
 
@@ -938,9 +938,12 @@ Writing out every allowed flag is tedious. This is by design. If it feels like t
 
 The `inject_double_dash` feature only works for tools that follow POSIX conventions. Test with your specific binaries.
 
-### 6. Kill does not kill grandchildren
+### 6. Kill targets the process group
 
-When proc_jail kills a process (timeout, output limit), only the direct child receives SIGKILL. Grandchild processes may continue running. For full process tree termination, use process groups or containers.
+Commands run in their own process group. On timeout, output limit, normal exit,
+or cancellation, proc_jail sends `SIGKILL` to the group so ordinary descendants
+do not survive. Descendants that deliberately create a new session or move to a
+different process group require a stronger container or cgroup boundary.
 
 ### 7. Risky binary list is advisory
 
@@ -1000,7 +1003,7 @@ The built-in risky binary categories catch common mistakes but are not exhaustiv
 
 ---
 
-## v0.1 Scope
+## Initial v0.1 Scope
 
 ### Included
 
@@ -1020,7 +1023,7 @@ The built-in risky binary categories catch common mistakes but are not exhaustiv
 - Type-safe API: `prepare() -> PreparedCommand`
 - Comprehensive error types
 
-### Excluded (v0.2+)
+### Excluded from v0.1
 
 - Windows support
 - `LimitBehavior::Truncate`

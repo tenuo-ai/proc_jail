@@ -14,7 +14,7 @@ This document describes the security properties and known limitations of `proc_j
 
 4. **Environment isolation**: By default, no environment variables are passed. Dangerous variables (LD_PRELOAD, PYTHONPATH, etc.) are always stripped.
 
-5. **Resource bounds**: Timeout and output limits are enforced. Exceeding limits kills the process.
+5. **Resource bounds**: Timeout and output limits are enforced. Exceeding limits kills the process group.
 
 6. **Fail closed**: Any validation failure, ambiguity, or error results in denial.
 
@@ -24,7 +24,7 @@ This document describes the security properties and known limitations of `proc_j
 
 2. **Binary safety**: An allowed binary may have bugs, vulnerabilities, or dangerous features. proc_jail only controls which binary runs and with what arguments.
 
-3. **Subprocess control**: Allowed binaries can spawn their own subprocesses. proc_jail only controls the top-level spawn.
+3. **Subprocess validation**: Allowed binaries can spawn their own subprocesses. proc_jail validates only the top-level command, although its process-group cleanup normally terminates descendants with it.
 
 4. **Memory/CPU limits**: Only wall-clock timeout and output byte limits are enforced. Use cgroups for memory/CPU limits.
 
@@ -48,14 +48,15 @@ An attacker with **local filesystem write access** could:
 - Use container isolation
 - Avoid local attackers with filesystem write access
 
-### Grandchild Processes
+### Process Groups
 
-When proc_jail kills a process (timeout, output limit exceeded), only the direct child receives SIGKILL. Grandchild processes are not killed automatically.
+proc_jail starts each command in its own process group. On timeout, output-limit
+errors, normal command exit, or cancellation of `PreparedCommand::spawn()`, it
+sends `SIGKILL` to that group so descendants do not outlive the call.
 
-**Mitigations**:
-- Use process groups (requires additional code)
-- Use containers with proper init
-- Set timeout on the container/cgroup level
+A program can deliberately escape this cleanup by creating a new session or
+moving a descendant into another process group. For hostile or untrusted
+binaries, use a container or cgroup boundary in addition to proc_jail.
 
 ### Risky Binary List is Advisory
 

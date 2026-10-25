@@ -312,3 +312,24 @@ fn test_dropped_spawn_does_not_block_runtime_shutdown() {
     let pid = read_pid(&pid_file);
     assert!(wait_gone(pid), "child {} survived cancellation", pid);
 }
+
+#[test]
+fn test_spawn_sync_inside_current_thread_runtime() {
+    let policy = ProcPolicy::builder()
+        .allow_bin("/bin/echo")
+        .arg_rules("/bin/echo", ArgRules::new().max_positionals(1))
+        .build()
+        .unwrap();
+    let prepared = policy
+        .prepare(ProcRequest::new("/bin/echo", vec!["ok".to_string()]))
+        .unwrap();
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+
+    let output = rt.block_on(async { prepared.spawn_sync() }).unwrap();
+
+    assert!(output.success());
+    assert_eq!(output.stdout_string(), "ok\n");
+}

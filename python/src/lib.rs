@@ -36,7 +36,7 @@ fn exec_error_to_py_err(e: ExecError) -> PyErr {
 // =============================================================================
 
 /// Policy for handling risky binaries (shells, interpreters, etc.).
-#[pyclass(eq, eq_int)]
+#[pyclass(eq, eq_int, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum RiskyBinPolicy {
     /// Deny risky binaries even if in allowlist (default)
@@ -58,7 +58,7 @@ impl From<RiskyBinPolicy> for RustRiskyBinPolicy {
 }
 
 /// Mode for double-dash injection.
-#[pyclass(eq, eq_int)]
+#[pyclass(eq, eq_int, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum InjectDoubleDash {
     /// Never inject -- (default)
@@ -77,7 +77,7 @@ impl From<InjectDoubleDash> for RustInjectDoubleDash {
 }
 
 /// Risk category for dangerous binaries.
-#[pyclass(eq, eq_int)]
+#[pyclass(eq, eq_int, from_py_object)]
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum RiskCategory {
     Shell = 0,
@@ -109,7 +109,7 @@ impl From<RustRiskCategory> for RiskCategory {
 ///     >>> rules = rules.max_flags(3)
 ///     >>> rules = rules.max_positionals(10)
 ///     >>> rules = rules.inject_double_dash(InjectDoubleDash.AfterFlags)
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct ArgRules {
     inner: RustArgRules,
@@ -185,7 +185,7 @@ impl ArgRules {
 /// Example:
 ///     >>> request = ProcRequest("/usr/bin/grep", ["-n", "pattern", "file.txt"])
 ///     >>> request = request.with_cwd("/tmp")
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct ProcRequest {
     inner: RustProcRequest,
@@ -419,7 +419,7 @@ impl PreparedCommand {
 ///     ...         .max_positionals(10))
 ///     ...     .timeout_secs(30)
 ///     ...     .build())
-#[pyclass]
+#[pyclass(from_py_object)]
 #[derive(Clone)]
 pub struct ProcPolicyBuilder {
     bins: Vec<String>,

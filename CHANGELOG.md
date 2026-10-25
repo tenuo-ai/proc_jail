@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-10-25
+
 ### Added
 
 - `PreparedCommand::wrap_with()` to launch the validated command through another program (for example an OS sandbox launcher), plus `launch_program()`/`launch_args()` accessors
@@ -20,6 +22,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Processes the command leaves running in its group are killed when it exits
 - The timeout now also covers waiting for exit after the output pipes close
 - Dropping the future returned by `spawn()` kills the command's process group
+
+### Fixed
+
+- `spawn_sync()` no longer deadlocks when called from a current-thread Tokio runtime
+- Python releases now include `abi3` wheels for Linux and macOS on x86-64 and ARM64, plus a source distribution
+
+### Security
+
+- Upgraded PyO3 to 0.29.3 to address RUSTSEC-2026-0176 and RUSTSEC-2026-0177
 
 ## [0.1.0] - 2026-01-11
 

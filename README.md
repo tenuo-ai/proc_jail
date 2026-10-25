@@ -51,7 +51,7 @@ print(output.stdout_string())
 
 ```toml
 [dependencies]
-proc_jail = "0.1"
+proc_jail = "0.2"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
@@ -171,7 +171,7 @@ ProcPolicyBuilder()
     .max_stderr(1048576)   # 1 MB
 ```
 
-The command runs in its own process group. When a limit is hit, or when the command exits, the whole group is killed with SIGKILL, so grandchildren (for example `npm run build` → `node`) do not outlive the call.
+The command runs in its own process group. When a limit is hit, the command exits, or the returned future is cancelled, the whole group is killed with SIGKILL, so grandchildren (for example `npm run build` → `node`) do not outlive the call.
 
 ### Launching Through a Wrapper
 
