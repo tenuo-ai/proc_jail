@@ -308,9 +308,7 @@ fn test_dropped_spawn_does_not_block_runtime_shutdown() {
     assert!(result.is_err(), "spawn should still be waiting");
     assert!(start.elapsed() < Duration::from_secs(5));
 
-    // Dropping spawn() does not kill the child; clean it up here.
+    // Dropping spawn() kills the child without making runtime shutdown wait.
     let pid = read_pid(&pid_file);
-    unsafe {
-        libc::kill(pid, libc::SIGKILL);
-    }
+    assert!(wait_gone(pid), "child {} survived cancellation", pid);
 }

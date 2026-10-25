@@ -108,7 +108,6 @@ impl PreparedCommand {
             .envs(self.launch_env.iter().map(|(k, v)| (k, v)))
             // Own process group, so limits can kill grandchildren too.
             .process_group(0)
-            .kill_on_drop(true)
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .stdin(Stdio::null());
@@ -201,6 +200,10 @@ impl PreparedCommand {
             };
             if exited {
                 kill_process_group(pgid);
+            } else {
+                // The child may already have been reaped, so its pid/group id
+                // is no longer ours to signal and may be reused.
+                group.disarm();
             }
             Ok::<_, ExecError>(exited)
         };
