@@ -92,6 +92,10 @@ output = policy.prepare(request).spawn_sync()
 # The injection is just a literal string, not interpreted
 ```
 
+If a timeout or output limit stops a command, `spawn_sync()` raises
+`StoppedError`, a `RuntimeError` subclass. Its `stdout` and `stderr`
+attributes contain the bounded output captured before the command stopped.
+
 ## API Reference
 
 ### ProcPolicyBuilder
@@ -195,4 +199,3 @@ Dangerous variables (`LD_PRELOAD`, `PYTHONPATH`, etc.) are always stripped.
 ## License
 
 MIT OR Apache-2.0
-

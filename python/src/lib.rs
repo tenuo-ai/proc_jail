@@ -7,6 +7,7 @@
 
 use pyo3::exceptions::{PyRuntimeError, PyValueError};
 use pyo3::prelude::*;
+use pyo3::types::PyBytes;
 use std::collections::HashMap;
 use std::time::Duration;
 
@@ -17,6 +18,13 @@ use proc_jail::{
     RiskyBinPolicy as RustRiskyBinPolicy, Violation as RustViolation,
 };
 
+pyo3::create_exception!(
+    proc_jail,
+    StoppedError,
+    PyRuntimeError,
+    "A command was stopped by its timeout or an output limit."
+);
+
 // =============================================================================
 // Error Conversion
 // =============================================================================
@@ -26,9 +34,32 @@ fn violation_to_py_err(v: RustViolation) -> PyErr {
     PyValueError::new_err(v.to_string())
 }
 
-/// Convert proc_jail ExecError to Python RuntimeError
+/// Convert proc_jail ExecError to Python RuntimeError.
+///
+/// Stop errors use the RuntimeError-compatible `StoppedError` subclass and
+/// expose the bounded output as `stdout` and `stderr` bytes.
 fn exec_error_to_py_err(e: ExecError) -> PyErr {
-    PyRuntimeError::new_err(e.to_string())
+    let message = e.to_string();
+    let partial = match e {
+        ExecError::Timeout { partial, .. }
+        | ExecError::StdoutLimitExceeded { partial, .. }
+        | ExecError::StderrLimitExceeded { partial, .. } => partial,
+        ExecError::SpawnFailed { .. } | ExecError::NonZeroExit { .. } => {
+            return PyRuntimeError::new_err(message);
+        }
+    };
+
+    Python::attach(|py| {
+        let err = StoppedError::new_err(message);
+        let value = err.value(py);
+        value
+            .setattr("stdout", PyBytes::new(py, &partial.stdout))
+            .expect("StoppedError accepts attributes");
+        value
+            .setattr("stderr", PyBytes::new(py, &partial.stderr))
+            .expect("StoppedError accepts attributes");
+        err
+    })
 }
 
 // =============================================================================
@@ -335,7 +366,9 @@ impl PreparedCommand {
     ///     Output from the command
     ///
     /// Raises:
-    ///     RuntimeError: If execution fails (timeout, limit exceeded, spawn failed)
+    ///     StoppedError: If a timeout or output limit stops the command. The
+    ///         exception exposes bounded partial output as `stdout` and `stderr`.
+    ///     RuntimeError: If another execution failure occurs.
     fn spawn_sync(&self) -> PyResult<Output> {
         self.inner
             .clone()
@@ -632,6 +665,7 @@ impl ProcPolicy {
 ///     >>> print(output.stdout_string())
 #[pymodule]
 fn _proc_jail(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    m.add("StoppedError", m.py().get_type::<StoppedError>())?;
     m.add_class::<RiskyBinPolicy>()?;
     m.add_class::<InjectDoubleDash>()?;
     m.add_class::<RiskCategory>()?;
