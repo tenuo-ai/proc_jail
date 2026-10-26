@@ -4,6 +4,7 @@
 //! - [`Violation`]: Policy violations detected during `prepare()` - the request is rejected
 //! - [`ExecError`]: Execution errors during `spawn()` - the command was valid but execution failed
 
+use crate::output::PartialOutput;
 use std::time::Duration;
 use thiserror::Error;
 
@@ -115,15 +116,30 @@ pub enum Violation {
 pub enum ExecError {
     /// Process exceeded timeout and was killed
     #[error("process timed out after {elapsed:?} (limit: {limit:?})")]
-    Timeout { limit: Duration, elapsed: Duration },
+    Timeout {
+        limit: Duration,
+        elapsed: Duration,
+        /// Output read before the process was killed.
+        partial: PartialOutput,
+    },
 
     /// Process exceeded stdout limit and was killed
     #[error("stdout limit exceeded: {limit} bytes")]
-    StdoutLimitExceeded { limit: usize },
+    StdoutLimitExceeded {
+        limit: usize,
+        /// Output read before the process was killed; stdout is exactly
+        /// `limit` bytes.
+        partial: PartialOutput,
+    },
 
     /// Process exceeded stderr limit and was killed
     #[error("stderr limit exceeded: {limit} bytes")]
-    StderrLimitExceeded { limit: usize },
+    StderrLimitExceeded {
+        limit: usize,
+        /// Output read before the process was killed; stderr is exactly
+        /// `limit` bytes.
+        partial: PartialOutput,
+    },
 
     /// Failed to spawn the process
     #[error("failed to spawn process: {reason}")]
@@ -132,6 +148,19 @@ pub enum ExecError {
     /// Process exited with non-zero status
     #[error("process exited with code {code}")]
     NonZeroExit { code: i32, stderr: String },
+}
+
+impl ExecError {
+    /// The output read before the command was stopped, for a timeout or an
+    /// output limit.
+    pub fn partial_output(&self) -> Option<&PartialOutput> {
+        match self {
+            ExecError::Timeout { partial, .. }
+            | ExecError::StdoutLimitExceeded { partial, .. }
+            | ExecError::StderrLimitExceeded { partial, .. } => Some(partial),
+            ExecError::SpawnFailed { .. } | ExecError::NonZeroExit { .. } => None,
+        }
+    }
 }
 
 /// Combined error type for the prepare-and-spawn flow.
