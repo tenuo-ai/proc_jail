@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-10-25
+
 ### Added
 
 - `PartialOutput` and `ExecError::partial_output()`: a command stopped by its timeout or an output limit returns the output it wrote before it was stopped, capped at the limits
