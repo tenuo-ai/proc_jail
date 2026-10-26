@@ -10,10 +10,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - `PartialOutput` and `ExecError::partial_output()`: a command stopped by its timeout or an output limit returns the output it wrote before it was stopped, capped at the limits
+- Python `StoppedError`, a `RuntimeError` subclass whose `stdout` and `stderr` attributes expose the same bounded partial output
 
 ### Changed
 
 - **Breaking:** `ExecError::Timeout`, `StdoutLimitExceeded` and `StderrLimitExceeded` have a new `partial` field. Patterns that list fields without `..` need updating
+
+### Removed
+
+- The obsolete, unmaintained `proc_jail_spec_v3.md`; the crate API, README, security policy, and maintained documentation are authoritative
 
 ## [0.2.0] - 2026-10-25
 

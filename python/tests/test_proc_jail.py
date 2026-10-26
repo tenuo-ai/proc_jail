@@ -23,6 +23,7 @@ from proc_jail import (
     ProcRequest,
     RiskCategory,
     RiskyBinPolicy,
+    StoppedError,
 )
 
 
@@ -246,6 +247,38 @@ class TestExecution:
 
         with pytest.raises(RuntimeError, match="timed out"):
             prepared.spawn_sync()
+
+    def test_timeout_exposes_partial_output(self):
+        """StoppedError retains bounded output and remains a RuntimeError."""
+        policy = (
+            ProcPolicyBuilder()
+            .allow_bin("/bin/sh")
+            .arg_rules(
+                "/bin/sh",
+                ArgRules()
+                .allowed_flags(["-c"])
+                .max_flags(1)
+                .max_positionals(1),
+            )
+            .allow_risky_binaries()
+            .timeout_secs(1)
+            .max_stdout(1024)
+            .max_stderr(1024)
+            .build()
+        )
+        prepared = policy.prepare(
+            ProcRequest(
+                "/bin/sh",
+                ["-c", "echo started; echo warming-up >&2; exec /bin/sleep 30"],
+            )
+        )
+
+        with pytest.raises(StoppedError, match="timed out") as caught:
+            prepared.spawn_sync()
+
+        assert isinstance(caught.value, RuntimeError)
+        assert caught.value.stdout == b"started\n"
+        assert caught.value.stderr == b"warming-up\n"
 
 
 class TestSubcommandPinning:

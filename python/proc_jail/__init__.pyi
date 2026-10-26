@@ -4,6 +4,11 @@ from enum import IntEnum
 
 __version__: str
 
+class StoppedError(RuntimeError):
+    """A command stopped by its timeout or an output limit."""
+    stdout: bytes
+    stderr: bytes
+
 class RiskyBinPolicy(IntEnum):
     """Policy for handling risky binaries (shells, interpreters, etc.)."""
     DenyByDefault = 0
@@ -142,7 +147,9 @@ class PreparedCommand:
             Output from the command
         
         Raises:
-            RuntimeError: If execution fails (timeout, limit exceeded, spawn failed)
+            StoppedError: If the timeout or an output limit stops the command.
+                Its stdout and stderr attributes contain bounded partial output.
+            RuntimeError: If another execution failure occurs.
         """
         ...
     
@@ -279,4 +286,3 @@ class ProcPolicy:
             ValueError: If the request violates the policy
         """
         ...
-

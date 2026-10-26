@@ -10,6 +10,7 @@ from proc_jail._proc_jail import (
     ProcRequest,
     RiskCategory,
     RiskyBinPolicy,
+    StoppedError,
 )
 
 __all__ = [
@@ -22,6 +23,7 @@ __all__ = [
     "ProcRequest",
     "RiskCategory",
     "RiskyBinPolicy",
+    "StoppedError",
 ]
 
 __version__ = "0.2.0"
