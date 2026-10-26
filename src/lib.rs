@@ -82,7 +82,7 @@ pub use cwd_policy::CwdPolicy;
 pub use env_policy::{EnvPolicy, ALWAYS_STRIP};
 pub use error::{ExecError, ProcError, RiskCategory, Violation};
 pub use limits::ResourceLimits;
-pub use output::Output;
+pub use output::{Output, PartialOutput};
 pub use policy::{ProcPolicy, ProcPolicyBuilder};
 pub use prepared::PreparedCommand;
 pub use request::ProcRequest;

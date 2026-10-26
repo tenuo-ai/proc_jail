@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `PartialOutput` and `ExecError::partial_output()`: a command stopped by its timeout or an output limit returns the output it wrote before it was stopped, capped at the limits
+
+### Changed
+
+- **Breaking:** `ExecError::Timeout`, `StdoutLimitExceeded` and `StderrLimitExceeded` have a new `partial` field. Patterns that list fields without `..` need updating
+
 ## [0.2.0] - 2026-10-25
 
 ### Added

@@ -5,7 +5,7 @@
 
 use crate::error::ExecError;
 use crate::limits::ResourceLimits;
-use crate::output::Output;
+use crate::output::{Output, PartialOutput};
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
@@ -92,6 +92,9 @@ impl PreparedCommand {
     /// - `ExecError::StdoutLimitExceeded` if stdout exceeded the limit
     /// - `ExecError::StderrLimitExceeded` if stderr exceeded the limit
     ///
+    /// These three carry the output read before the command was stopped,
+    /// capped at the limits ([`ExecError::partial_output`]).
+    ///
     /// The command runs in its own process group. On error, or once the
     /// command exits, any processes still in that group are killed. If the
     /// returned future is dropped before it completes (for example because
@@ -127,66 +130,32 @@ impl PreparedCommand {
 
         let limits = self.limits;
 
+        // The buffers live outside the timed future, so what was read before
+        // a timeout or an output limit is still returned with the error.
+        let mut stdout_buf = Vec::new();
+        let mut stderr_buf = Vec::new();
+
         // Read stdout and stderr concurrently with limits
         let read_future = async {
-            let mut stdout_buf = Vec::new();
-            let mut stderr_buf = Vec::new();
-
-            // Read stdout with limit
-            let stdout_result = async {
-                let mut buf = [0u8; 8192];
-                loop {
-                    match stdout.read(&mut buf).await {
-                        Ok(0) => break Ok(()), // EOF
-                        Ok(n) => {
-                            if stdout_buf.len() + n > limits.max_stdout {
-                                let remaining = limits.max_stdout.saturating_sub(stdout_buf.len());
-                                stdout_buf.extend_from_slice(&buf[..remaining]);
-                                break Err(ExecError::StdoutLimitExceeded {
-                                    limit: limits.max_stdout,
-                                });
-                            }
-                            stdout_buf.extend_from_slice(&buf[..n]);
-                        }
-                        Err(e) => {
-                            break Err(ExecError::SpawnFailed {
-                                reason: format!("stdout read error: {}", e),
-                            });
-                        }
-                    }
-                }
-            };
-
-            // Read stderr with limit
-            let stderr_result = async {
-                let mut buf = [0u8; 8192];
-                loop {
-                    match stderr.read(&mut buf).await {
-                        Ok(0) => break Ok(()), // EOF
-                        Ok(n) => {
-                            if stderr_buf.len() + n > limits.max_stderr {
-                                let remaining = limits.max_stderr.saturating_sub(stderr_buf.len());
-                                stderr_buf.extend_from_slice(&buf[..remaining]);
-                                break Err(ExecError::StderrLimitExceeded {
-                                    limit: limits.max_stderr,
-                                });
-                            }
-                            stderr_buf.extend_from_slice(&buf[..n]);
-                        }
-                        Err(e) => {
-                            break Err(ExecError::SpawnFailed {
-                                reason: format!("stderr read error: {}", e),
-                            });
-                        }
-                    }
-                }
-            };
+            let stdout_result = read_limited(
+                &mut stdout,
+                &mut stdout_buf,
+                limits.max_stdout,
+                Stop::Stdout,
+                "stdout",
+            );
+            let stderr_result = read_limited(
+                &mut stderr,
+                &mut stderr_buf,
+                limits.max_stderr,
+                Stop::Stderr,
+                "stderr",
+            );
 
             // Run both concurrently; the first limit error stops both, so a
             // descendant holding the other pipe open cannot stall us.
             tokio::try_join!(stdout_result, stderr_result)?;
-
-            Ok((stdout_buf, stderr_buf))
+            Ok(())
         };
 
         // Read output while watching for the child to exit. Its exit is
@@ -205,15 +174,16 @@ impl PreparedCommand {
                 // is no longer ours to signal and may be reused.
                 group.disarm();
             }
-            Ok::<_, ExecError>(exited)
+            Ok::<_, Stop>(exited)
         };
         let run = async { tokio::try_join!(read_future, watch) };
 
         // Apply timeout
         let result = timeout(limits.timeout, run).await;
+        let partial = |stdout: Vec<u8>, stderr: Vec<u8>| PartialOutput { stdout, stderr };
 
         match result {
-            Ok(Ok(((stdout_buf, stderr_buf), exited))) => {
+            Ok(Ok(((), exited))) => {
                 // Kill anything still left in the group after the pipes closed
                 if exited {
                     kill_process_group(pgid);
@@ -229,12 +199,23 @@ impl PreparedCommand {
                     status,
                 })
             }
-            Ok(Err(error)) => {
+            Ok(Err(stop)) => {
                 // Kill the process group on limit exceeded
                 kill_process_group(pgid);
                 group.disarm();
                 let _ = child.kill().await;
-                Err(error)
+                let partial = partial(stdout_buf, stderr_buf);
+                Err(match stop {
+                    Stop::Stdout => ExecError::StdoutLimitExceeded {
+                        limit: limits.max_stdout,
+                        partial,
+                    },
+                    Stop::Stderr => ExecError::StderrLimitExceeded {
+                        limit: limits.max_stderr,
+                        partial,
+                    },
+                    Stop::Read(reason) => ExecError::SpawnFailed { reason },
+                })
             }
             Err(_) => {
                 // Timeout - kill and return error
@@ -245,6 +226,7 @@ impl PreparedCommand {
                 Err(ExecError::Timeout {
                     limit: limits.timeout,
                     elapsed,
+                    partial: partial(stdout_buf, stderr_buf),
                 })
             }
         }
@@ -395,6 +377,39 @@ fn poll_exited(pid: u32) -> Option<bool> {
         }
         if std::io::Error::last_os_error().kind() != std::io::ErrorKind::Interrupted {
             return Some(false);
+        }
+    }
+}
+
+/// Why reading output stopped early.
+enum Stop {
+    Stdout,
+    Stderr,
+    Read(String),
+}
+
+/// Reads `pipe` into `buf` until EOF, keeping at most `max` bytes and
+/// stopping with `limit` once more arrive.
+async fn read_limited<R: tokio::io::AsyncRead + Unpin>(
+    pipe: &mut R,
+    buf: &mut Vec<u8>,
+    max: usize,
+    limit: Stop,
+    name: &str,
+) -> Result<(), Stop> {
+    let mut chunk = [0u8; 8192];
+    loop {
+        match pipe.read(&mut chunk).await {
+            Ok(0) => return Ok(()), // EOF
+            Ok(n) => {
+                if buf.len() + n > max {
+                    let remaining = max.saturating_sub(buf.len());
+                    buf.extend_from_slice(&chunk[..remaining]);
+                    return Err(limit);
+                }
+                buf.extend_from_slice(&chunk[..n]);
+            }
+            Err(e) => return Err(Stop::Read(format!("{name} read error: {e}"))),
         }
     }
 }

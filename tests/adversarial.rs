@@ -580,7 +580,10 @@ async fn test_stdout_limit_boundary() {
     let result = prepared.spawn().await;
 
     assert!(
-        matches!(result, Err(ExecError::StdoutLimitExceeded { limit: 1000 })),
+        matches!(
+            result,
+            Err(ExecError::StdoutLimitExceeded { limit: 1000, .. })
+        ),
         "Should hit stdout limit at 1000 bytes, got: {:?}",
         result
     );
