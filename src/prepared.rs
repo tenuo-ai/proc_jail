@@ -202,6 +202,14 @@ impl PreparedCommand {
             Ok(Err(stop)) => {
                 // Kill the process group on limit exceeded
                 kill_process_group(pgid);
+                drain(
+                    &mut stdout,
+                    &mut stderr,
+                    &mut stdout_buf,
+                    &mut stderr_buf,
+                    &limits,
+                )
+                .await;
                 group.disarm();
                 let _ = child.kill().await;
                 let partial = partial(stdout_buf, stderr_buf);
@@ -221,6 +229,14 @@ impl PreparedCommand {
                 // Timeout - kill and return error
                 let elapsed = start.elapsed();
                 kill_process_group(pgid);
+                drain(
+                    &mut stdout,
+                    &mut stderr,
+                    &mut stdout_buf,
+                    &mut stderr_buf,
+                    &limits,
+                )
+                .await;
                 group.disarm();
                 let _ = child.kill().await;
                 Err(ExecError::Timeout {
@@ -414,6 +430,42 @@ async fn read_limited<R: tokio::io::AsyncRead + Unpin>(
     }
 }
 
+/// How long to read what is left in the pipes once a command is stopped.
+/// The pipes close when the killed group exits; a descendant that left the
+/// group could hold them open, so the wait is bounded.
+const DRAIN_TIMEOUT: Duration = Duration::from_millis(250);
+
+/// Reads what a stopped command wrote but was not yet read, up to the
+/// limits, so the partial output ends where the command stopped.
+async fn drain<O: tokio::io::AsyncRead + Unpin, E: tokio::io::AsyncRead + Unpin>(
+    stdout: &mut O,
+    stderr: &mut E,
+    stdout_buf: &mut Vec<u8>,
+    stderr_buf: &mut Vec<u8>,
+    limits: &ResourceLimits,
+) {
+    let _ = timeout(DRAIN_TIMEOUT, async {
+        // A pipe at its limit stops at once; the other is still read.
+        let _ = tokio::join!(
+            read_limited(
+                stdout,
+                stdout_buf,
+                limits.max_stdout,
+                Stop::Stdout,
+                "stdout"
+            ),
+            read_limited(
+                stderr,
+                stderr_buf,
+                limits.max_stderr,
+                Stop::Stderr,
+                "stderr"
+            ),
+        );
+    })
+    .await;
+}
+
 /// Kills the process group when dropped, unless disarmed first. Disarm it
 /// before reaping the child, after which the group id may be reused.
 struct GroupGuard(Option<u32>);
@@ -444,5 +496,45 @@ fn kill_process_group(pgid: Option<u32>) {
     // SAFETY: killpg only sends a signal; it has no memory-safety preconditions.
     unsafe {
         libc::killpg(pgid, libc::SIGKILL);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn limits(max_stdout: usize, max_stderr: usize) -> ResourceLimits {
+        ResourceLimits::default()
+            .with_max_stdout(max_stdout)
+            .with_max_stderr(max_stderr)
+    }
+
+    #[tokio::test]
+    async fn drain_appends_what_is_left_within_the_limits() {
+        let (mut stdout, mut stderr): (&[u8], &[u8]) = (b"tail\n", b"0123456789");
+        let (mut out, mut err) = (b"head\n".to_vec(), Vec::new());
+        drain(&mut stdout, &mut stderr, &mut out, &mut err, &limits(64, 4)).await;
+        assert_eq!(out, b"head\ntail\n");
+        assert_eq!(err, b"0123");
+    }
+
+    #[tokio::test]
+    async fn drain_gives_up_on_a_pipe_that_stays_open() {
+        // The write end is kept open, as by a descendant that left the group.
+        let (mut stdout, _writer) = tokio::io::duplex(64);
+        let mut stderr: &[u8] = b"last words\n";
+        let (mut out, mut err) = (Vec::new(), Vec::new());
+        let start = Instant::now();
+        drain(
+            &mut stdout,
+            &mut stderr,
+            &mut out,
+            &mut err,
+            &limits(64, 64),
+        )
+        .await;
+        assert!(start.elapsed() < DRAIN_TIMEOUT * 4);
+        assert_eq!(err, b"last words\n");
+        assert!(out.is_empty());
     }
 }
