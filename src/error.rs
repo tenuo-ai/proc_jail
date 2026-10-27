@@ -119,7 +119,7 @@ pub enum ExecError {
     Timeout {
         limit: Duration,
         elapsed: Duration,
-        /// Output read before the process was killed.
+        /// Output written before the process was killed.
         partial: PartialOutput,
     },
 
@@ -127,7 +127,7 @@ pub enum ExecError {
     #[error("stdout limit exceeded: {limit} bytes")]
     StdoutLimitExceeded {
         limit: usize,
-        /// Output read before the process was killed; stdout is exactly
+        /// Output written before the process was killed; stdout is exactly
         /// `limit` bytes.
         partial: PartialOutput,
     },
@@ -136,7 +136,7 @@ pub enum ExecError {
     #[error("stderr limit exceeded: {limit} bytes")]
     StderrLimitExceeded {
         limit: usize,
-        /// Output read before the process was killed; stderr is exactly
+        /// Output written before the process was killed; stderr is exactly
         /// `limit` bytes.
         partial: PartialOutput,
     },

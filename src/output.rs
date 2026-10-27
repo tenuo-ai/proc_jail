@@ -37,8 +37,9 @@ impl Output {
     }
 }
 
-/// Output read before a command was stopped by its timeout or an output
-/// limit, capped at the limits.
+/// Output a command wrote before it was stopped by its timeout or an output
+/// limit, capped at the limits. It includes what was still in the pipes
+/// when the command was stopped (read for at most 250 ms).
 ///
 /// Its `Debug` shows only the byte counts, so logging the error does not
 /// log the command's output.

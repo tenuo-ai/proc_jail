@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A command stopped by its timeout or an output limit now returns the output it wrote right before it was stopped. What was still unread in the pipes when it was killed is read too, within the limits and for at most 250 ms
+
 ## [0.3.0] - 2026-10-25
 
 ### Added
