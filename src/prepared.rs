@@ -444,18 +444,23 @@ async fn drain<O: tokio::io::AsyncRead + Unpin, E: tokio::io::AsyncRead + Unpin>
     stderr_buf: &mut Vec<u8>,
     limits: &ResourceLimits,
 ) {
+    // Each pipe is read only up to the room left in its buffer, so one
+    // that is already full, or fills here, ends at once instead of waiting
+    // on a pipe that may stay open.
+    let room = |buf: &Vec<u8>, max: usize| max.saturating_sub(buf.len()) as u64;
+    let mut stdout = stdout.take(room(stdout_buf, limits.max_stdout));
+    let mut stderr = stderr.take(room(stderr_buf, limits.max_stderr));
     let _ = timeout(DRAIN_TIMEOUT, async {
-        // A pipe at its limit stops at once; the other is still read.
         let _ = tokio::join!(
             read_limited(
-                stdout,
+                &mut stdout,
                 stdout_buf,
                 limits.max_stdout,
                 Stop::Stdout,
                 "stdout"
             ),
             read_limited(
-                stderr,
+                &mut stderr,
                 stderr_buf,
                 limits.max_stderr,
                 Stop::Stderr,
@@ -536,5 +541,21 @@ mod tests {
         assert!(start.elapsed() < DRAIN_TIMEOUT * 4);
         assert_eq!(err, b"last words\n");
         assert!(out.is_empty());
+    }
+
+    #[tokio::test]
+    async fn drain_does_not_wait_on_a_pipe_that_is_already_full() {
+        // stdout is at its limit and its pipe stays open; stderr fills up.
+        let (mut stdout, _writer) = tokio::io::duplex(64);
+        let (mut stderr, mut stderr_writer) = tokio::io::duplex(64);
+        tokio::io::AsyncWriteExt::write_all(&mut stderr_writer, b"0123456789")
+            .await
+            .unwrap();
+        let (mut out, mut err) = (b"full".to_vec(), Vec::new());
+        let start = Instant::now();
+        drain(&mut stdout, &mut stderr, &mut out, &mut err, &limits(4, 4)).await;
+        assert!(start.elapsed() < DRAIN_TIMEOUT / 2, "{:?}", start.elapsed());
+        assert_eq!(out, b"full");
+        assert_eq!(err, b"0123");
     }
 }
